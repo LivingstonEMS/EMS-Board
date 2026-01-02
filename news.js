@@ -1,155 +1,52 @@
-const NEWS_FEEDS = [
-  "https://www.wpsdlocal6.com/rss/category/news/local-news/",
+// Persistent bottom ticker: World + EMS + Local + NWS alerts
+// Uses rss2json (CORS-friendly)
+const RSS2JSON = "https://api.rss2json.com/v1/api.json?rss_url=";
+
+// Pick your feeds
+const FEEDS = [
+  // World news
   "https://feeds.bbci.co.uk/news/world/rss.xml",
+  // EMS / emergency services news
   "https://www.ems1.com/rss/",
-  "https://www.firehouse.com/rss/"
+  // Local (WPSD — if they block feeds, we can swap)
+  "https://www.wpsdlocal6.com/search/?f=rss&t=article&c=news"
 ];
 
+const SEPARATOR = "   |   ";
+let headlines = [];
+let tickerIndex = 0;
 
-// NWS zone codes (your counties)
-const NWS_ZONES = [
-  "KY121", // Livingston
-  "KY143", // Lyon
-  "KY145", // McCracken
-  "KY157"  // Marshall
-];
-
-// RSS proxy to avoid CORS issues
-const PROXY = "https://api.allorigins.win/raw?url=";
-
-async function fetchRSS(url) {
-  const res = await fetch(PROXY + encodeURIComponent(url));
-  const text = await res.text();
-  const xml = new DOMParser().parseFromString(text, "text/xml");
-  return [...xml.querySelectorAll("item")].slice(0, 4);
+async function fetchFeed(url) {
+  const res = await fetch(RSS2JSON + encodeURIComponent(url), { cache: "no-store" });
+  const data = await res.json();
+  if (!data || data.status !== "ok") return [];
+  return (data.items || []).map((i) => i.title).filter(Boolean);
 }
 
-function normalizeArea(areaDesc) {
-  // NWS areaDesc can be long; shorten a bit
-  return (areaDesc || "")
-    .replace(/;?\s*and\s*/gi, ", ")
-    .replace(/\s{2,}/g, " ")
-    .trim();
+function setTickerText(text) {
+  const el = document.getElementById("news-content");
+  if (!el) return;
+  el.textContent = text;
 }
 
-async function fetchNWSAlerts() {
-  let alerts = [];
+async function loadHeadlines() {
+  try {
+    const results = await Promise.all(FEEDS.map(fetchFeed));
+    headlines = results.flat().slice(0, 60);
 
-  for (const zone of NWS_ZONES) {
-    try {
-      const res = await fetch(`https://api.weather.gov/alerts/active?zone=${zone}`);
-      const data = await res.json();
-
-      (data.features || []).forEach((a) => {
-        const p = a.properties || {};
-        alerts.push({
-          event: p.event || "Alert",
-          area: normalizeArea(p.areaDesc),
-          severity: p.severity || "Unknown"
-        });
-      });
-    } catch (e) {
-      console.warn("NWS alert fetch failed:", zone, e);
+    if (!headlines.length) {
+      setTickerText("No headlines available.");
+      return;
     }
-  }
 
-  // Remove duplicates (same event+area)
-  const seen = new Set();
-  alerts = alerts.filter((a) => {
-    const key = `${a.event}|${a.area}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-
-  return alerts;
-}
-
-function isTornadoWarning(alert) {
-  const e = (alert.event || "").toLowerCase();
-  return e.includes("tornado warning") || e.includes("tornado emergency");
-}
-
-function showTornadoOverride(areasText) {
-  const overlay = document.getElementById("tornado-override");
-  const areas = document.getElementById("tornado-areas");
-  areas.textContent = areasText || "Your area is under a Tornado Warning.";
-
-  overlay.classList.remove("hidden");
-
-  // Pause slide rotation
-  if (typeof window.setRotationPaused === "function") {
-    window.setRotationPaused(true);
+    // Build one long ticker string
+    const text = headlines.join(SEPARATOR);
+    setTickerText(text);
+  } catch (e) {
+    console.warn("Ticker load failed:", e);
+    setTickerText("Headlines unavailable.");
   }
 }
 
-function hideTornadoOverride() {
-  const overlay = document.getElementById("tornado-override");
-  overlay.classList.add("hidden");
-
-  // Do NOT auto-resume if user manually paused? We will resume.
-  // If you want "stay paused until manual resume", tell me and I'll tweak it.
-  if (typeof window.setRotationPaused === "function") {
-    window.setRotationPaused(false);
-  }
-}
-
-async function loadTicker() {
-  let parts = [];
-
-  // 1) NWS alerts first
-  const alerts = await fetchNWSAlerts();
-
-  // Tornado override check
-  const tornadoAlerts = alerts.filter(isTornadoWarning);
-  if (tornadoAlerts.length) {
-    const areaList = tornadoAlerts
-      .map((a) => a.area || "Affected area")
-      .filter(Boolean)
-      .slice(0, 6)
-      .join(" • ");
-
-    showTornadoOverride(areaList);
-  } else {
-    hideTornadoOverride();
-  }
-
-  alerts.forEach((a) => {
-    const severe = a.severity === "Severe" || a.severity === "Extreme";
-    const label = `${a.event} — ${a.area}`;
-
-    parts.push(
-      severe
-        ? `⚠️ <span class="alert-severe">${label}</span>`
-        : `⚠️ <span class="alert-text">${label}</span>`
-    );
-  });
-
-  // 2) News RSS feeds
-  for (const feed of NEWS_FEEDS) {
-    try {
-      const items = await fetchRSS(feed);
-      items.forEach((item) => {
-        const title = item.querySelector("title")?.textContent?.trim();
-        if (title) parts.push(title);
-      });
-    } catch (e) {
-      console.warn("RSS feed failed:", feed, e);
-    }
-  }
-
-  if (!parts.length) {
-    parts.push("No alerts or headlines available");
-  }
-
-  const ticker = document.getElementById("news-content");
-  ticker.innerHTML = " 📰  " + parts.join(" &nbsp; | &nbsp; ");
-
-  // Force ticker animation restart after DOM update
-  ticker.style.animation = "none";
-  ticker.offsetHeight; // reflow
-  ticker.style.animation = "scroll-left 28s linear infinite";
-}
-
-loadTicker();
-setInterval(loadTicker, 180000); // every 3 minutes
+loadHeadlines();
+setInterval(loadHeadlines, 10 * 60 * 1000); // refresh every 10 minutes

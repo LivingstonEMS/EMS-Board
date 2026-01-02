@@ -1,22 +1,38 @@
-// Flight Wx (KPAH) via AllOrigins proxy to avoid CORS
-const PROXY = "https://api.allorigins.win/raw?url=";
+// Flight Wx (KPAH) - tries multiple CORS proxies automatically
+const PROXIES = [
+  "https://api.allorigins.win/raw?url=",
+  "https://thingproxy.freeboard.io/fetch/",
+  "https://cors.isomorphic-git.org/"
+];
 
 const METAR_URL = "https://aviationweather.gov/api/data/metar?ids=KPAH&format=json";
 const TAF_URL   = "https://aviationweather.gov/api/data/taf?ids=KPAH&format=json";
 
-async function fetchJson(url) {
-  const r = await fetch(PROXY + encodeURIComponent(url), { cache: "no-store" });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return await r.json();
+async function fetchJsonWithFallback(url) {
+  let lastErr;
+
+  for (const proxy of PROXIES) {
+    try {
+      const r = await fetch(proxy + encodeURIComponent(url), { cache: "no-store" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return await r.json();
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+
+  throw lastErr || new Error("All proxies failed");
 }
 
 function computeCeilingFt(metarObj) {
   const clouds = metarObj?.clouds || [];
   let ceiling = null;
+
   for (const c of clouds) {
     const cover = (c.cover || "").toUpperCase();
     const base = c.base;
     if (base == null) continue;
+
     if (cover === "BKN" || cover === "OVC" || cover === "VV") {
       const ft = Number(base);
       if (!Number.isNaN(ft)) ceiling = ceiling === null ? ft : Math.min(ceiling, ft);
@@ -28,6 +44,7 @@ function computeCeilingFt(metarObj) {
 function computeFlightCategory(ceilingFt, visSm) {
   const vis = Number(visSm);
   const ceil = ceilingFt === null ? Infinity : Number(ceilingFt);
+
   if (ceil < 500 || vis < 1) return "LIFR";
   if (ceil < 1000 || vis < 3) return "IFR";
   if (ceil < 3000 || vis < 5) return "MVFR";
@@ -52,11 +69,12 @@ function setUnavailable(msg) {
 
 async function loadAviation() {
   try {
-    const metars = await fetchJson(METAR_URL);
-    const tafs   = await fetchJson(TAF_URL);
+    const metars = await fetchJsonWithFallback(METAR_URL);
+    const tafs   = await fetchJsonWithFallback(TAF_URL);
 
     const metar = Array.isArray(metars) ? metars[0] : null;
     const taf   = Array.isArray(tafs) ? tafs[0] : null;
+
     if (!metar) throw new Error("No METAR returned");
 
     const rawMetar = metar.raw_text || metar.raw || metar.text || "";
@@ -79,11 +97,14 @@ async function loadAviation() {
       `${ceilingLine}<br>${visLine}<br>${windLine}<br>${wxLine}`;
 
     const rawTaf = taf?.raw_text || taf?.raw || taf?.text || "";
-    const tafLine = rawTaf ? `TAF: ${rawTaf.slice(0, 160)}${rawTaf.length > 160 ? "…" : ""}` : "";
+    const tafLine = rawTaf
+      ? `TAF: ${rawTaf.slice(0, 160)}${rawTaf.length > 160 ? "…" : ""}`
+      : "";
 
     document.getElementById("av-raw").innerHTML =
       `METAR: ${rawMetar.slice(0, 160)}${rawMetar.length > 160 ? "…" : ""}` +
       (tafLine ? `<br><br>${tafLine}` : "");
+
   } catch (e) {
     console.warn("Aviation load failed:", e);
     setUnavailable(String(e?.message || e));
@@ -91,4 +112,4 @@ async function loadAviation() {
 }
 
 loadAviation();
-setInterval(loadAviation, 300000);
+setInterval(loadAviation, 300000); // 5 minutes
