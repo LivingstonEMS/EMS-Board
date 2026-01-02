@@ -89,4 +89,4 @@ async function loadHeadlines() {
 }
 
 loadHeadlines();
-setInterval(loadHeadlines, 5 * 60 * 1000);
+setInterval(loadHeadlines, 15 * 60 * 1000);
