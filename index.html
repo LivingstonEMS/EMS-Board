@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Livingston County EMS Board</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+
+  <!-- FULL RED TORNADO OVERRIDE -->
+  <div id="tornado-override" class="hidden" role="alert" aria-live="assertive">
+    <div class="tornado-inner">
+      <div class="tornado-title">🚨 TORNADO WARNING 🚨</div>
+      <div id="tornado-areas" class="tornado-areas">Loading…</div>
+      <div class="tornado-sub">
+        TAKE COVER NOW • Interior room • Lowest level • Away from windows
+      </div>
+      <div class="tornado-sub2">
+        (Clears automatically when NWS cancels the warning)
+      </div>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <img src="livingston-ems-logo.png" id="logo-top" alt="Livingston Co. EMS"/>
+
+    <div id="clock">--:--</div>
+
+    <div id="weather">
+      <div class="weather-title">ZIP 42081</div>
+      <div id="weather-temp">--°</div>
+      <div id="weather-desc">Loading weather…</div>
+      <div id="weather-extra"></div>
+    </div>
+
+
+<div id="aviation">
+  <div class="aviation-title">Flight Wx (KPAH)</div>
+  <div id="av-category">Loading…</div>
+  <div id="av-details"></div>
+  <div id="av-raw"></div>
+</div>
+
+    <img src="code3-logo.png" id="logo-bottom" alt="CODE 3 Designs"/>
+  </div>
+
+  <!-- Top banner + controls (main area) -->
+  <div id="topbar">
+    <div id="status-banner">Loading status…</div>
+
+    <div id="controls">
+      <button id="pauseBtn" type="button">⏸️ Pause</button>
+    </div>
+  </div>
+
+  <!-- Slides -->
+  <div class="slide-container">
+    <div class="slide active">
+      <h1>Weather Radar – Livingston County, KY</h1>
+      <iframe
+        src="https://embed.windy.com/embed2.html?lat=37.21&lon=-88.36&zoom=7&overlay=radar"
+        frameborder="0"
+        allowfullscreen
+      ></iframe>
+    </div>
+
+    <div class="slide">
+      <h1>Flight Weather – Paducah (KPAH)</h1>
+     <iframe
+  src="https://embed.windy.com/embed2.html?lat=37.06&lon=-88.77&zoom=7&level=surface&overlay=clouds&product=ecmwf"
+  frameborder="0">
+</iframe>
+
+    </div>
+
+    <div class="slide">
+      <h1>Shift Schedule</h1>
+      <table id="schedule-table"></table>
+    </div>
+
+    <div class="slide">
+      <h1>Announcements</h1>
+      <ul class="announcements" id="announcements-list"></ul>
+    </div>
+  </div>
+
+  <!-- Bottom ticker (persistent on every slide) -->
+  <div id="global-ticker">
+    <div id="news-content">Loading headlines…</div>
+  </div>
+
+  <!-- Scripts -->
+<script src="slides.js" defer></script>
+<script src="clock.js" defer></script>
+<script src="weather.js" defer></script>
+<script src="sheets.js" defer></script>
+<script src="aviation.js" defer></script>
+<script src="news.js" defer></script>
+
+</body>
+</html>

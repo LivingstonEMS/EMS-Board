@@ -1,0 +1,1 @@
+const ROTATE_TIME = 10000;
