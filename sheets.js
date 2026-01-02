@@ -1,3 +1,6 @@
+console.log("✅ sheets.js loaded");
+document.getElementById("status-banner").textContent = "Sheets JS Loaded ✅";
+
 // Paste your "Publish to web" CSV URLs here
 const ANNOUNCEMENTS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSjU3xZI4zsPk0ECZHaFKWKZjdvTdVWk3X4VcYlNh9OV00SHwzuT0TsABo3xzdjJnwo5jci80SJgkhe/pub?output=csv";
 const SCHEDULE_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vStmTvJPfr46sHRtY3h8aLp40EN_4jD_lX813MEp7aSuKcWYkroNRi-evzAnZCvN8uiUGgWGGiaP50d/pub?output=csv";
