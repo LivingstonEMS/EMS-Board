@@ -75,3 +75,209 @@ html, body {
 }
 
 #weather-extra {
+  font-size: 1em;
+  margin-top: 6px;
+  opacity: 0.9;
+}
+
+/* ===============================
+   AVIATION WEATHER
+================================ */
+#aviation {
+  width: 100%;
+  padding: 12px;
+  margin-top: 12px;
+  background: #1a2230;
+  border-radius: 8px;
+  font-size: 0.95em;
+}
+
+.aviation-title {
+  font-weight: bold;
+  font-size: 1.1em;
+  margin-bottom: 6px;
+  text-align: center;
+}
+
+#av-category {
+  font-weight: bold;
+  margin-bottom: 6px;
+}
+
+.av-vfr { color: #00ff6a; }
+.av-mvfr { color: #ffd400; }
+.av-ifr { color: #ff8c00; }
+.av-lifr { color: #ff4c4c; }
+
+#av-details,
+#av-raw {
+  font-size: 0.9em;
+  margin-top: 6px;
+  line-height: 1.3;
+}
+
+/* ===============================
+   TOP BAR
+================================ */
+#topbar {
+  position: fixed;
+  left: 320px;
+  top: 0;
+  right: 0;
+  height: 70px;
+  background: #121821;
+  border-bottom: 2px solid #1e90ff;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  z-index: 900;
+}
+
+#status-banner {
+  flex: 1;
+  font-size: 1.6em;
+  font-weight: bold;
+}
+
+#controls button {
+  font-size: 1.1em;
+  padding: 8px 14px;
+  background: #1e90ff;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+#controls button:hover {
+  background: #1875d1;
+}
+
+/* ===============================
+   SLIDES
+================================ */
+.slide-container {
+  position: absolute;
+  top: 70px;
+  left: 320px;
+  right: 0;
+  bottom: 60px;
+  overflow: hidden;
+}
+
+.slide {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  padding: 20px;
+  display: none;
+}
+
+.slide.active {
+  display: block;
+}
+
+.slide h1 {
+  font-size: 2.2em;
+  margin-bottom: 12px;
+}
+
+/* IFRAME MAPS */
+.slide iframe {
+  width: 100%;
+  height: calc(100% - 60px);
+  border: none;
+  border-radius: 10px;
+}
+
+/* ===============================
+   SCHEDULE
+================================ */
+#schedule-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 1.4em;
+}
+
+#schedule-table td {
+  border-bottom: 1px solid #2c3444;
+  padding: 10px;
+}
+
+/* ===============================
+   ANNOUNCEMENTS
+================================ */
+.announcements {
+  list-style: none;
+  font-size: 1.6em;
+  line-height: 1.5;
+}
+
+.announcements li {
+  margin-bottom: 12px;
+}
+
+/* ===============================
+   TORNADO OVERRIDE
+================================ */
+#tornado-override {
+  position: fixed;
+  inset: 0;
+  background: red;
+  color: white;
+  z-index: 5000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#tornado-override.hidden {
+  display: none;
+}
+
+.tornado-inner {
+  text-align: center;
+  max-width: 800px;
+}
+
+.tornado-title {
+  font-size: 4em;
+  font-weight: bold;
+}
+
+.tornado-areas {
+  font-size: 2em;
+  margin: 20px 0;
+}
+
+.tornado-sub,
+.tornado-sub2 {
+  font-size: 1.5em;
+}
+
+/* ===============================
+   NEWS TICKER (FIXED)
+================================ */
+#global-ticker {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 60px;
+  background: #121821;
+  border-top: 2px solid #1e90ff;
+  overflow: hidden;
+  z-index: 2000;
+}
+
+#news-content {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 60px;
+  line-height: 60px;
+  white-space: nowrap;
+  font-size: 1.6em;
+  will-change: transform;
+  transform: translateX(100vw);
+}
