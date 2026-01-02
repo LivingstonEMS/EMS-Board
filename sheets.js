@@ -1,6 +1,4 @@
-// ===============================
-// Google Sheets Admin Integration
-// ===============================
+console.log("✅ sheets.js loaded");
 
 // Published CSV URLs
 const ANNOUNCEMENTS_URL =
@@ -12,22 +10,7 @@ const SCHEDULE_URL =
 const STATUS_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vRKMYW3E7RImjEQV253Vj7bPtQYUI2HrYUoyh9TeqkrfdaYGqKbGWe83voMA6VGRruLvo-zSPx1_FaH/pub?output=csv";
 
-// -------------------------------
-// Debug helpers (shows errors in status bar)
-// -------------------------------
-function setStatusText(msg) {
-  const el = document.getElementById("status-banner");
-  if (el) el.textContent = msg;
-}
-
-window.addEventListener("error", (e) => {
-  // If sheets.js has any runtime error, you’ll SEE it on the screen
-  setStatusText(`Sheets error: ${e.message}`);
-});
-
-// -------------------------------
-// CSV Parser (handles quoted commas)
-// -------------------------------
+/** Robust CSV parser (handles quoted commas) */
 function parseCSV(text) {
   const rows = [];
   let row = [];
@@ -50,15 +33,15 @@ function parseCSV(text) {
     }
 
     if (ch === "," && !inQuotes) {
-      row.push(cell.trim());
+      row.push(cell);
       cell = "";
       continue;
     }
 
     if ((ch === "\n" || ch === "\r") && !inQuotes) {
       if (ch === "\r" && next === "\n") i++;
-      row.push(cell.trim());
-      if (row.length > 1 || row[0]) rows.push(row);
+      row.push(cell);
+      rows.push(row.map((c) => (c ?? "").trim()));
       row = [];
       cell = "";
       continue;
@@ -68,47 +51,41 @@ function parseCSV(text) {
   }
 
   if (cell.length || row.length) {
-    row.push(cell.trim());
-    if (row.length > 1 || row[0]) rows.push(row);
+    row.push(cell);
+    rows.push(row.map((c) => (c ?? "").trim()));
   }
 
-  return rows;
+  // remove completely empty rows
+  return rows.filter((r) => r.some((c) => c !== ""));
 }
 
 async function loadCSV(url) {
   const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(`Fetch failed (${res.status})`);
+  if (!res.ok) throw new Error(`CSV HTTP ${res.status}`);
   const text = await res.text();
-  return parseCSV(text.trim()).slice(1); // drop header row
+  const all = parseCSV(text.trim());
+  return all.slice(1); // drop header row
 }
 
-// -------------------------------
-// Status banner
-// Sheet formats supported:
-//   Mode,Message   (uses Message)
-//   Message        (uses first column)
-// -------------------------------
+/* ---------------- Status banner ---------------- */
 async function loadStatus() {
   const rows = await loadCSV(STATUS_URL);
+
+  // Expected: first data row columns like: Mode, Message
   const message = rows?.[0]?.[1] || rows?.[0]?.[0] || "Normal Operations";
-  setStatusText(message);
+  document.getElementById("status-banner").textContent = message;
 }
 
-// -------------------------------
-// Announcements
-// Columns: Text,Active (Active supports TRUE/YES/1)
-// -------------------------------
+/* ---------------- Announcements ---------------- */
 async function loadAnnouncements() {
-  const list = document.getElementById("announcements-list");
-  if (!list) return;
-
   const rows = await loadCSV(ANNOUNCEMENTS_URL);
+  const list = document.getElementById("announcements-list");
   list.innerHTML = "";
 
-  rows.forEach(([text, active]) => {
-    const a = String(active || "").trim().toUpperCase();
-    const on = a === "TRUE" || a === "YES" || a === "1";
-    if (on && text) {
+  rows.forEach((r) => {
+    const text = r[0] || "";
+    const active = (r[1] || "").toUpperCase();
+    if (active === "TRUE" && text) {
       const li = document.createElement("li");
       li.textContent = text;
       list.appendChild(li);
@@ -116,55 +93,56 @@ async function loadAnnouncements() {
   });
 
   if (!list.children.length) {
-    list.innerHTML = "<li>No announcements</li>";
+    const li = document.createElement("li");
+    li.textContent = "No announcements";
+    list.appendChild(li);
   }
 }
 
-// -------------------------------
-// Schedule (simple list; won’t break anything if sheet changes)
-// -------------------------------
+/* ---------------- Schedule ---------------- */
 async function loadSchedule() {
-  const table = document.getElementById("schedule-table");
-  if (!table) return;
-
   const rows = await loadCSV(SCHEDULE_URL);
+  const table = document.getElementById("schedule-table");
   table.innerHTML = "";
 
-  // Just render first ~12 non-empty rows (safe mode)
-  let shown = 0;
-  for (const r of rows) {
-    if (shown >= 12) break;
-    if (!r.join("").trim()) continue;
-
-    const crew = r[0] || "";
-    const unit = r[1] || "";
-    const time = r[2] || "";
-
-    table.innerHTML += `<tr><td>${crew}</td><td>${unit}</td><td>${time}</td></tr>`;
-    shown++;
-  }
-
-  if (!table.children.length) {
+  if (!rows.length) {
     table.innerHTML = `<tr><td colspan="3">No schedule posted</td></tr>`;
+    return;
   }
+
+  // If your sheet has 8 columns: Date | Day | Area | Name | Level | Start | End | Code
+  // We'll show: Area/Name/Time
+  rows.forEach((r) => {
+    const area = r[2] || "";
+    const name = r[3] || "";
+    const start = r[5] || "";
+    const end = r[6] || "";
+    const time = start && end ? `${start}-${end}` : (start || end || "");
+    table.innerHTML += `<tr><td>${area}</td><td>${name}</td><td>${time}</td></tr>`;
+  });
 }
 
-// -------------------------------
-// Refresh loop
-// -------------------------------
+/* ---------------- Refresh loop ---------------- */
 async function refreshSheets() {
   try {
-    await Promise.all([loadStatus(), loadAnnouncements(), loadSchedule()]);
+    await loadStatus();
   } catch (e) {
-    // If ANY fetch fails, you’ll see it in the status bar
-    setStatusText(`Sheets fetch error: ${e.message || e}`);
-    console.warn("Sheets refresh failed:", e);
+    console.warn("Status failed:", e);
+    // Keep previous status instead of overwriting
+  }
+
+  try {
+    await loadAnnouncements();
+  } catch (e) {
+    console.warn("Announcements failed:", e);
+  }
+
+  try {
+    await loadSchedule();
+  } catch (e) {
+    console.warn("Schedule failed:", e);
   }
 }
 
-window.addEventListener("load", () => {
-  // Immediate proof it’s running:
-  setStatusText("Sheets loading…");
-  refreshSheets();
-  setInterval(refreshSheets, 120000); // every 2 minutes
-});
+refreshSheets();
+setInterval(refreshSheets, 120000);
