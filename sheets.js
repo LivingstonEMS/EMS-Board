@@ -80,12 +80,27 @@ async function loadStatus() {
 async function loadAnnouncements() {
   const rows = await loadCSV(ANNOUNCEMENTS_URL);
   const list = document.getElementById("announcements-list");
+  if (!list) return;
+
   list.innerHTML = "";
 
+  const looksActive = (v) => {
+    const a = String(v || "").trim().toUpperCase();
+    return a === "TRUE" || a === "YES" || a === "1" || a === "Y" || a === "ON";
+  };
+
+  console.log("📣 Announcements rows (first 10):", rows.slice(0, 10));
+
   rows.forEach((r) => {
-    const text = r[0] || "";
-    const active = (r[1] || "").toUpperCase();
-    if (active === "TRUE" && text) {
+    const cells = (r || []).map((c) => String(c ?? "").trim());
+    if (!cells.some((c) => c)) return;
+
+    const isActive = cells.some(looksActive);
+
+    // text = join all non-active cells
+    const text = cells.filter((c) => c && !looksActive(c)).join(" — ").trim();
+
+    if (isActive && text) {
       const li = document.createElement("li");
       li.textContent = text;
       list.appendChild(li);
@@ -98,6 +113,7 @@ async function loadAnnouncements() {
     list.appendChild(li);
   }
 }
+
 
 /* ---------------- Schedule ---------------- */
 async function loadSchedule() {
