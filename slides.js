@@ -1,3 +1,5 @@
+console.log("✅ slides.js loaded");
+setInterval(() => console.log("⏱️ slide tick"), 5000);
 // Slide rotation (every 10 seconds) + Pause/Resume button
 let currentSlide = 0;
 const rotationMs = 10000;
