@@ -1,7 +1,7 @@
 // Paste your "Publish to web" CSV URLs here
-const ANNOUNCEMENTS_URL = "PASTE_ANNOUNCEMENTS_CSV_URL";
-const SCHEDULE_URL =  "https://docs.google.com/spreadsheets/d/e/2PACX-1vStmTvJPfr46sHRtY3h8aLp40EN_4jD_lX813MEp7aSuKcWYkroNRi-evzAnZCvN8uiUGgWGGiaP50d/pub?output=csv";
-const STATUS_URL = "PASTE_STATUS_CSV_URL";
+const ANNOUNCEMENTS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSjU3xZI4zsPk0ECZHaFKWKZjdvTdVWk3X4VcYlNh9OV00SHwzuT0TsABo3xzdjJnwo5jci80SJgkhe/pub?output=csv";
+const SCHEDULE_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vStmTvJPfr46sHRtY3h8aLp40EN_4jD_lX813MEp7aSuKcWYkroNRi-evzAnZCvN8uiUGgWGGiaP50d/pub?output=csv";
+const STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRKMYW3E7RImjEQV253Vj7bPtQYUI2HrYUoyh9TeqkrfdaYGqKbGWe83voMA6VGRruLvo-zSPx1_FaH/pub?output=csv";
 
 /** Robust CSV parser (handles quoted commas) */
 function parseCSV(text) {
