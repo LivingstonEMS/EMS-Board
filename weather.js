@@ -1,4 +1,14 @@
-const WEATHER_URL = "/.netlify/functions/weather";
+// Weather for ZIP 42081 (Livingston County, KY) - Open-Meteo (no key)
+const WEATHER_URL =
+  "https://api.open-meteo.com/v1/forecast" +
+  "?latitude=36.67" +
+  "&longitude=-88.99" +
+  "&current_weather=true" +
+  "&hourly=relativehumidity_2m,windgusts_10m" +
+  "&daily=temperature_2m_max,temperature_2m_min" +
+  "&temperature_unit=fahrenheit" +
+  "&windspeed_unit=mph" +
+  "&timezone=America/Chicago";
 
 function weatherDescription(code) {
   const map = {
@@ -25,11 +35,7 @@ function isStorm(code) {
 
 function formatTime(ts) {
   const d = new Date(ts);
-  return d.toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false
-  });
+  return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
 function findHourlyIndex(times, targetTime) {
@@ -43,15 +49,12 @@ async function loadWeather() {
     const res = await fetch(WEATHER_URL, { cache: "no-store" });
     const data = await res.json();
 
-    if (data.error) throw new Error(data.error);
-
     const w = data.current_weather;
     const idx = findHourlyIndex(data.hourly.time, w.time);
 
     const temp = Math.round(w.temperature);
     const wind = Math.round(w.windspeed);
     const windDir = Math.round(w.winddirection);
-
     const high = Math.round(data.daily.temperature_2m_max[0]);
     const low = Math.round(data.daily.temperature_2m_min[0]);
 
@@ -59,9 +62,7 @@ async function loadWeather() {
     const gust = Math.round(data.hourly.windgusts_10m[idx] ?? wind);
 
     document.getElementById("weather-temp").textContent = `${temp}°`;
-    document.getElementById("weather-desc").textContent =
-      weatherDescription(w.weathercode);
-
+    document.getElementById("weather-desc").textContent = weatherDescription(w.weathercode);
     document.getElementById("weather-extra").innerHTML = `
       High ${high}° / Low ${low}°<br>
       Wind ${wind} mph (Gusts ${gust})<br>
@@ -70,12 +71,11 @@ async function loadWeather() {
       Updated ${formatTime(w.time)}
     `;
 
-    const weatherBox = document.getElementById("weather");
-    if (isStorm(w.weathercode)) weatherBox.classList.add("weather-alert");
-    else weatherBox.classList.remove("weather-alert");
-
-  } catch (err) {
-    console.warn("Weather load failed:", err);
+    const box = document.getElementById("weather");
+    if (isStorm(w.weathercode)) box.classList.add("weather-alert");
+    else box.classList.remove("weather-alert");
+  } catch (e) {
+    console.warn("Weather load failed:", e);
     document.getElementById("weather-desc").textContent = "Weather unavailable";
   }
 }

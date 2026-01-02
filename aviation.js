@@ -1,4 +1,14 @@
-const AVIATION_URL = "/.netlify/functions/aviation";
+// Flight Wx (KPAH) via AllOrigins proxy to avoid CORS
+const PROXY = "https://api.allorigins.win/raw?url=";
+
+const METAR_URL = "https://aviationweather.gov/api/data/metar?ids=KPAH&format=json";
+const TAF_URL   = "https://aviationweather.gov/api/data/taf?ids=KPAH&format=json";
+
+async function fetchJson(url) {
+  const r = await fetch(PROXY + encodeURIComponent(url), { cache: "no-store" });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return await r.json();
+}
 
 function computeCeilingFt(metarObj) {
   const clouds = metarObj?.clouds || [];
@@ -42,22 +52,14 @@ function setUnavailable(msg) {
 
 async function loadAviation() {
   try {
-    const res = await fetch(AVIATION_URL, { cache: "no-store" });
-    const data = await res.json();
+    const metars = await fetchJson(METAR_URL);
+    const tafs   = await fetchJson(TAF_URL);
 
-    if (data.error) throw new Error(data.error);
-
-    const metar = Array.isArray(data.metar) ? data.metar[0] : null;
-    const taf = Array.isArray(data.taf) ? data.taf[0] : null;
-
+    const metar = Array.isArray(metars) ? metars[0] : null;
+    const taf   = Array.isArray(tafs) ? tafs[0] : null;
     if (!metar) throw new Error("No METAR returned");
 
-const rawMetar =
-  metar.raw_text ||
-  metar.raw ||
-  metar.text ||
-  "";
-
+    const rawMetar = metar.raw_text || metar.raw || metar.text || "";
     const visSm = metar.visibility?.value ?? metar.visibility_statute_mi ?? 99;
 
     const windSpd = metar.wind_speed?.value ?? metar.wind_speed_kt ?? "";
@@ -69,24 +71,19 @@ const rawMetar =
     setCategoryUI(cat);
 
     const ceilingLine = ceilingFt === null ? "Ceiling: None (CLR/SCT)" : `Ceiling: ${ceilingFt} ft`;
-   const windLine =
-  windSpd
-    ? `Wind: ${windDir || "VRB"}° @ ${windSpd} kt`
-    : "Wind: Calm";
-
+    const windLine = windSpd ? `Wind: ${windDir || "VRB"}° @ ${windSpd} kt` : "Wind: Calm";
     const visLine = `Vis: ${visSm} sm`;
     const wxLine = wx ? `Wx: ${wx}` : "Wx: —";
 
     document.getElementById("av-details").innerHTML =
       `${ceilingLine}<br>${visLine}<br>${windLine}<br>${wxLine}`;
 
-    const rawTaf = taf?.raw || taf?.raw_text || "";
+    const rawTaf = taf?.raw_text || taf?.raw || taf?.text || "";
     const tafLine = rawTaf ? `TAF: ${rawTaf.slice(0, 160)}${rawTaf.length > 160 ? "…" : ""}` : "";
 
     document.getElementById("av-raw").innerHTML =
       `METAR: ${rawMetar.slice(0, 160)}${rawMetar.length > 160 ? "…" : ""}` +
       (tafLine ? `<br><br>${tafLine}` : "");
-
   } catch (e) {
     console.warn("Aviation load failed:", e);
     setUnavailable(String(e?.message || e));
