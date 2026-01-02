@@ -1,5 +1,8 @@
 console.log("✅ sheets.js loaded");
-document.getElementById("status-banner").textContent = "Sheets JS Loaded ✅";
+window.addEventListener("load", () => {
+  const sb = document.getElementById("status-banner");
+  if (sb) sb.textContent = "Sheets JS Loaded ✅";
+});
 
 // Paste your "Publish to web" CSV URLs here
 const ANNOUNCEMENTS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSjU3xZI4zsPk0ECZHaFKWKZjdvTdVWk3X4VcYlNh9OV00SHwzuT0TsABo3xzdjJnwo5jci80SJgkhe/pub?output=csv";
