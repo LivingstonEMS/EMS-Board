@@ -1,350 +1,77 @@
-/* =========================
-   Base
-========================= */
-body {
+/* ===============================
+   RESET / BASE
+================================ */
+* {
+  box-sizing: border-box;
   margin: 0;
-  background: #0b0f14;
-  color: #e6e6e6;
-  font-family: Arial, Helvetica, sans-serif;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+  background: #0e1117;
+  color: #ffffff;
+  font-family: "Segoe UI", Tahoma, Arial, sans-serif;
   overflow: hidden;
 }
 
-/* =========================
-   Sidebar
-========================= */
+/* ===============================
+   SIDEBAR
+================================ */
 #sidebar {
   position: fixed;
-  top: 0;
   left: 0;
-  width: 260px;
-  height: calc(100vh - 60px); /* leave room for ticker */
-  background: #0f1722;
+  top: 0;
+  width: 320px;
+  height: 100%;
+  background: #121821;
   border-right: 2px solid #1e90ff;
-  padding: 20px;
-  box-sizing: border-box;
-  z-index: 1500;
-
   display: flex;
   flex-direction: column;
   align-items: center;
+  padding: 15px 10px;
+  z-index: 1000;
 }
 
-#logo-top {
-  width: 100%;
-  max-height: 120px;
-  object-fit: contain;
-  margin-bottom: 18px;
+#logo-top,
+#logo-bottom {
+  max-width: 260px;
+  margin: 10px 0;
 }
 
 #clock {
-  font-size: 2.8em;
+  font-size: 3.2em;
   font-weight: bold;
-  color: #e6eef7;
-  margin-bottom: 14px;
-  letter-spacing: 2px;
+  margin: 15px 0;
 }
 
-/* =========================
-   Weather (sidebar)
-========================= */
+/* ===============================
+   WEATHER (SIDEBAR)
+================================ */
 #weather {
   width: 100%;
   text-align: center;
-  color: #e6eef7;
-  background: transparent;
-  border-radius: 12px;
-  padding: 10px 8px;
-  box-sizing: border-box;
+  padding: 12px;
+  margin: 10px 0;
+  background: #1a2230;
+  border-radius: 8px;
 }
 
 .weather-title {
-  font-size: 1.1em;
-  margin-bottom: 8px;
-  color: #7fb9ff;
+  font-size: 1.2em;
+  font-weight: bold;
+  margin-bottom: 6px;
 }
 
 #weather-temp {
-  font-size: 2.5em;
+  font-size: 3em;
   font-weight: bold;
 }
 
 #weather-desc {
-  font-size: 1.1em;
-  margin-top: 4px;
+  font-size: 1.2em;
+  margin-top: 6px;
 }
 
 #weather-extra {
-  font-size: 0.95em;
-  color: #c7d6ea;
-  margin-top: 10px;
-  line-height: 1.4em;
-}
-
-/* Storm alert state */
-.weather-alert {
-  background: #7a0f14;
-  border: 2px solid #ff3b3b;
-  border-radius: 12px;
-  padding: 12px;
-  box-shadow: 0 0 15px rgba(255, 0, 0, 0.6);
-}
-
-.weather-alert .weather-title,
-.weather-alert #weather-temp,
-.weather-alert #weather-desc,
-.weather-alert #weather-extra {
-  color: #ffffff;
-}
-
-/* =========================
-   Aviation (sidebar)
-========================= */
-#aviation {
-  width: 100%;
-  margin-top: 16px;
-  padding: 12px 10px;
-  border-radius: 12px;
-  background: #101a27;
-  border: 1px solid #22344a;
-  box-sizing: border-box;
-}
-
-.aviation-title {
-  font-size: 1.05em;
-  color: #7fb9ff;
-  margin-bottom: 8px;
-  text-align: center;
-}
-
-#av-category {
-  font-size: 1.35em;
-  font-weight: 800;
-  text-align: center;
-  margin-bottom: 6px;
-}
-
-#av-details {
-  font-size: 0.95em;
-  color: #c7d6ea;
-  line-height: 1.35em;
-  text-align: center;
-}
-
-#av-raw {
-  font-size: 0.78em;
-  color: #9fb3cc;
-  margin-top: 8px;
-  line-height: 1.25em;
-  white-space: normal;
-  word-break: break-word;
-}
-
-/* Aviation category colors */
-.av-vfr  { color: #52ff7a; }
-.av-mvfr { color: #ffd65a; }
-.av-ifr  { color: #ff7a52; }
-.av-lifr { color: #ff4d4d; }
-
-#logo-bottom {
-  width: 80%;
-  max-height: 90px;
-  object-fit: contain;
-  margin-top: auto; /* pins to bottom */
-  opacity: 0.9;
-}
-
-/* =========================
-   Top bar (main area)
-========================= */
-#topbar {
-  position: fixed;
-  left: 260px;
-  top: 0;
-  right: 0;
-  height: 60px;
-  display: flex;
-  align-items: center;
-  z-index: 1200;
-  background: rgba(11, 15, 20, 0.85);
-  border-bottom: 1px solid #1d2a3a;
-  box-sizing: border-box;
-}
-
-/* Status banner */
-#status-banner {
-  flex: 1;
-  text-align: center;
-  font-size: 1.8em;
-  padding: 10px 12px;
-  color: #ffffff;
-  background: #11304a;
-}
-
-/* Pause button */
-#controls {
-  padding-right: 16px;
-}
-
-#pauseBtn {
-  font-size: 1.1em;
-  padding: 10px 16px;
-  background: #1e90ff;
-  color: white;
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-}
-
-#pauseBtn.paused {
-  background: #8b0000;
-}
-
-/* =========================
-   Slides (main area)
-========================= */
-.slide-container {
-  margin-left: 260px;
-  padding-top: 60px; /* top bar */
-}
-
-.slide {
-  display: none;
-  padding: 20px;
-  height: calc(100vh - 60px - 60px); /* topbar + ticker */
-  box-sizing: border-box;
-}
-
-.slide.active {
-  display: block;
-}
-
-h1 {
-  text-align: center;
-  margin: 0 0 15px 0;
-  font-size: 2.2em;
-}
-
-iframe {
-  width: 100%;
-  height: 85%;
-  border-radius: 10px;
-  border: none;
-}
-
-/* Schedule table */
-table {
-  width: 100%;
-  font-size: 2em;
-  border-collapse: collapse;
-}
-
-td {
-  border-bottom: 1px solid #2a3b52;
-  padding: 14px;
-}
-
-/* Announcements */
-.announcements {
-  font-size: 2em;
-  list-style: none;
-  padding: 30px;
-  margin: 0;
-}
-
-.announcements li {
-  margin-bottom: 18px;
-}
-
-/* =========================
-   Bottom ticker
-========================= */
-#global-ticker {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  height: 60px;
-  background: #121821;
-  border-top: 2px solid #1e90ff;
-  overflow: hidden;
-  z-index: 2000;
-}
-
-#news-content {
-  white-space: nowrap;
-  font-size: 1.6em;
-  line-height: 60px;
-  padding-left: 100%;
-  animation: scroll-left 28s linear infinite;
-}
-
-@keyframes scroll-left {
-  from { transform: translateX(0); }
-  to   { transform: translateX(-100%); }
-}
-
-/* Ticker alert styling */
-.alert-text {
-  color: #ff4d4d;
-  font-weight: bold;
-}
-
-.alert-severe {
-  color: #ffffff;
-  background: #b11218;
-  padding: 0 12px;
-  border-radius: 6px;
-  font-weight: bold;
-}
-
-/* =========================
-   FULL RED TORNADO OVERRIDE
-========================= */
-#tornado-override {
-  position: fixed;
-  inset: 0;
-  background: #b11218;
-  z-index: 99999; /* above everything */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 30px;
-  box-sizing: border-box;
-}
-
-#tornado-override.hidden {
-  display: none;
-}
-
-.tornado-inner {
-  max-width: 1100px;
-  width: 100%;
-  color: #fff;
-}
-
-.tornado-title {
-  font-size: 4.2em;
-  font-weight: 900;
-  letter-spacing: 2px;
-  margin-bottom: 18px;
-  text-transform: uppercase;
-}
-
-.tornado-areas {
-  font-size: 2.2em;
-  font-weight: 700;
-  margin-bottom: 22px;
-}
-
-.tornado-sub {
-  font-size: 2.2em;
-  font-weight: 900;
-  text-transform: uppercase;
-  margin-bottom: 12px;
-}
-
-.tornado-sub2 {
-  font-size: 1.3em;
-  opacity: 0.95;
-}

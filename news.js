@@ -2,29 +2,20 @@ console.log("✅ news.js loaded");
 
 // Mix of EMS + Local sources (RSS)
 const FEEDS = [
-  // EMS
   "https://www.ems1.com/rss/",
   "https://www.jems.com/feed/",
-  // Local-ish (WPSD doesn't provide a clean RSS consistently; use a general local feed as fallback)
   "https://www.wpsdlocal6.com/search/?f=rss&t=article&c=news",
-  // National backup
   "https://rss.nytimes.com/services/xml/rss/nyt/US.xml"
 ];
 
-// Proxy to avoid CORS
+// Proxy to avoid CORS (NOTE: sometimes gets blocked)
 const PROXY = "https://api.allorigins.win/raw?url=";
 
 // How many headlines total to show
 const MAX_HEADLINES = 25;
 
-// Speed control (lower = faster)
-const TICKER_SECONDS = 22; // <-- change this to speed up/down
-
-function setTickerSpeed(seconds) {
-  const el = document.getElementById("news-content");
-  if (!el) return;
-  el.style.animationDuration = `${seconds}s`;
-}
+// Speed in pixels per second (higher = faster)
+const TICKER_PX_PER_SEC = 140; // try 120-180
 
 function stripHtml(s) {
   return (s || "")
@@ -39,10 +30,7 @@ function parseRssTitles(xmlText) {
   const items = Array.from(doc.querySelectorAll("item"));
 
   return items
-    .map((it) => {
-      const t = it.querySelector("title")?.textContent || "";
-      return stripHtml(t);
-    })
+    .map((it) => stripHtml(it.querySelector("title")?.textContent || ""))
     .filter(Boolean);
 }
 
@@ -53,38 +41,59 @@ async function fetchFeed(url) {
   return parseRssTitles(text);
 }
 
-function setTickerText(text) {
+// ---- THE FIX: pixel-based scrolling that never cuts off ----
+function startTickerScroll(text) {
   const el = document.getElementById("news-content");
-  if (!el) return;
+  const wrap = document.getElementById("global-ticker");
+  if (!el || !wrap) return;
+
+  // If the text didn't change, don't restart (prevents mid-run snapping)
+  if (el.dataset.currentText === text) return;
+  el.dataset.currentText = text;
+
   el.textContent = text || "No headlines available";
-  // Restart animation cleanly
-  el.style.animation = "none";
-  // force reflow
-  void el.offsetHeight;
-  el.style.animation = "";
+
+  requestAnimationFrame(() => {
+    const wrapW = wrap.clientWidth;
+    const textW = el.scrollWidth;
+
+    const distance = wrapW + textW; // full travel
+    const durationSec = distance / TICKER_PX_PER_SEC;
+
+    // Kill any existing animation
+    if (el._anim) el._anim.cancel();
+
+    el._anim = el.animate(
+      [
+        { transform: `translateX(${wrapW}px)` },
+        { transform: `translateX(${-textW}px)` }
+      ],
+      {
+        duration: durationSec * 1000,
+        iterations: Infinity,
+        easing: "linear"
+      }
+    );
+  });
 }
 
 async function loadHeadlines() {
   try {
     const results = await Promise.allSettled(FEEDS.map(fetchFeed));
-
     const titles = results
       .filter((r) => r.status === "fulfilled")
       .flatMap((r) => r.value);
 
     const unique = Array.from(new Set(titles)).slice(0, MAX_HEADLINES);
-
     if (!unique.length) throw new Error("No headlines parsed");
 
     const line = unique.join("  |  ");
-    setTickerText(line);
-    setTickerSpeed(TICKER_SECONDS);
+    startTickerScroll(line);
 
     console.log(`📰 Loaded ${unique.length} headlines`);
   } catch (e) {
     console.warn("📰 Headlines failed:", e);
-    setTickerText("Headlines unavailable • Check internet / feed sources");
-    setTickerSpeed(28);
+    startTickerScroll("Headlines unavailable • Check internet / feed sources");
   }
 }
 
