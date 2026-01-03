@@ -35,7 +35,7 @@
   // ===============================
   // TICKER TUNING
   // ===============================
-  const MAX_HEADLINES = 25;
+  const MAX_HEADLINES =100;
 
   // Target how fast it moves:
   // Lower CHARS_PER_SECOND = slower ticker.
