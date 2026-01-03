@@ -1,19 +1,18 @@
 console.log("✅ news.js loaded");
 
-// RSS feeds
+// Mix of EMS + Local sources (RSS)
 const FEEDS = [
   "https://www.ems1.com/rss/",
   "https://www.jems.com/feed/",
+  "https://www.wpsdlocal6.com/search/?f=rss&t=article&c=news",
   "https://rss.nytimes.com/services/xml/rss/nyt/US.xml"
 ];
 
-// Proxy (can fail sometimes)
+// Proxy to avoid CORS (NOTE: this proxy sometimes has outages)
 const PROXY = "https://api.allorigins.win/raw?url=";
 
-// Settings
-const MAX_HEADLINES = 30;
-const TICKER_SECONDS = 75; // slower = more readable
-let lastTickerText = "";
+// How many headlines total to show
+const MAX_HEADLINES = 25;
 
 function stripHtml(s) {
   return (s || "")
@@ -25,8 +24,9 @@ function stripHtml(s) {
 
 function parseRssTitles(xmlText) {
   const doc = new DOMParser().parseFromString(xmlText, "text/xml");
-  return Array.from(doc.querySelectorAll("item"))
-    .map(it => stripHtml(it.querySelector("title")?.textContent || ""))
+  const items = Array.from(doc.querySelectorAll("item"));
+  return items
+    .map((it) => stripHtml(it.querySelector("title")?.textContent || ""))
     .filter(Boolean);
 }
 
@@ -37,53 +37,60 @@ async function fetchFeed(url) {
   return parseRssTitles(text);
 }
 
-function startTicker(text) {
+function setTickerText(text) {
   const el = document.getElementById("news-content");
-  const wrap = document.getElementById("global-ticker");
-  if (!el || !wrap) return;
+  if (!el) return;
 
-  // If text didn't change, DO NOT restart animation
-  if (text === lastTickerText) return;
-  lastTickerText = text;
-
-  el.classList.remove("ticking");
   el.textContent = text || "No headlines available";
 
-  // Wait one frame so layout is updated
-  requestAnimationFrame(() => {
-    const wrapW = wrap.clientWidth;
-    const textW = el.scrollWidth;
+  // Restart animation cleanly
+  el.style.animation = "none";
+  void el.offsetHeight; // force reflow
+  el.style.animation = "";
+}
 
-    // End point: move all the way off screen to the left
-    const end = -(textW + 50);
-    el.style.setProperty("--ticker-end", `${end}px`);
-    el.style.animationDuration = `${TICKER_SECONDS}s`;
+/**
+ * Auto-speed: longer text scrolls slower so it's always readable.
+ * - Minimum 90s
+ * - Typical 110-180s depending on length
+ */
+function setTickerSpeedFromText(text) {
+  const el = document.getElementById("news-content");
+  if (!el) return;
 
-    // restart clean
-    void el.offsetHeight;
-    el.classList.add("ticking");
-  });
+  const len = (text || "").length;
+
+  // 10-12 chars/sec feels readable for a wall board
+  const seconds = Math.max(90, Math.ceil(len / 10));
+  el.style.animationDuration = `${seconds}s`;
+
+  console.log("📰 ticker duration set to:", seconds, "seconds");
 }
 
 async function loadHeadlines() {
   try {
     const results = await Promise.allSettled(FEEDS.map(fetchFeed));
+
     const titles = results
-      .filter(r => r.status === "fulfilled")
-      .flatMap(r => r.value);
+      .filter((r) => r.status === "fulfilled")
+      .flatMap((r) => r.value);
 
     const unique = Array.from(new Set(titles)).slice(0, MAX_HEADLINES);
+
     if (!unique.length) throw new Error("No headlines parsed");
 
     const line = unique.join("  |  ");
-    startTicker(line);
+    setTickerText(line);
+    setTickerSpeedFromText(line);
 
     console.log(`📰 Loaded ${unique.length} headlines`);
   } catch (e) {
     console.warn("📰 Headlines failed:", e);
-    startTicker("Headlines unavailable • (RSS / proxy blocked)");
+    const fallback = "Headlines unavailable • Check internet / feed sources";
+    setTickerText(fallback);
+    setTickerSpeedFromText(fallback);
   }
 }
 
 loadHeadlines();
-setInterval(loadHeadlines, 25 * 60 * 1000);
+setInterval(loadHeadlines, 15 * 60 * 1000);

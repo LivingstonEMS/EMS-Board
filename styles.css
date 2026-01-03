@@ -235,3 +235,14 @@ html, body {
   animation-timing-function: linear;
   animation-iteration-count: infinite;
 }
+@keyframes tickerScroll {
+  0% { transform: translateX(100%); }
+  100% { transform: translateX(-100%); }
+}
+
+#news-content {
+  animation-name: tickerScroll;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  animation-duration: 120s; /* default slow */
+}
