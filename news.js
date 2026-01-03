@@ -6,8 +6,6 @@
   // ===============================
   // FEEDS (RSS)
   // ===============================
-  // Local news via Google News RSS is the most reliable “local” source on GitHub Pages.
-  // You can tweak these search queries any time.
   const FEEDS = [
     // EMS
     "https://www.ems1.com/rss/",
@@ -25,26 +23,28 @@
   // ===============================
   // PROXIES (fallbacks for CORS + downtime)
   // ===============================
-  // These sometimes fail depending on their own uptime, so we try several.
+  // Added codetabs proxy + timeouts so nothing hangs forever.
   const PROXIES = [
     (u) => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
     (u) => "https://corsproxy.io/?" + encodeURIComponent(u),
-    (u) => "https://r.jina.ai/http://" + u.replace(/^https?:\/\//, "") // returns page as text
+    (u) => "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(u),
+    (u) => "https://r.jina.ai/http://" + u.replace(/^https?:\/\//, "")
   ];
 
   // ===============================
   // TICKER TUNING
   // ===============================
-  const MAX_HEADLINES =100;
+  const MAX_HEADLINES = 100;
 
-  // Target how fast it moves:
-  // Lower CHARS_PER_SECOND = slower ticker.
-  // For ~4 minutes full scroll, CHARS_PER_SECOND around 2.5–3.5 usually feels right.
+  // Lower = slower
   const CHARS_PER_SECOND = 3.0;
 
-  // Clamp duration so it’s never too fast / too slow
-  const MIN_SECONDS = 180;  // at least 3 minutes
-  const MAX_SECONDS = 420;  // at most 7 minutes (tweak if you want even slower)
+  // Clamp duration
+  const MIN_SECONDS = 180; // 3 minutes
+  const MAX_SECONDS = 420; // 7 minutes
+
+  // If a proxy/feed hangs, kill it
+  const FETCH_TIMEOUT_MS = 8000;
 
   // Cache so if feeds fail you still show something
   const CACHE_KEY = "ems_board_headlines_cache_v1";
@@ -63,12 +63,10 @@
   function parseRssTitles(xmlText) {
     const doc = new DOMParser().parseFromString(xmlText, "text/xml");
 
-    // RSS: <item><title>...
     const rssItems = Array.from(doc.querySelectorAll("item > title")).map((n) =>
       stripHtml(n.textContent || "")
     );
 
-    // Atom: <entry><title>...
     const atomItems = Array.from(doc.querySelectorAll("entry > title")).map((n) =>
       stripHtml(n.textContent || "")
     );
@@ -77,19 +75,29 @@
   }
 
   async function fetchText(url) {
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.text();
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+
+    try {
+      const res = await fetch(url, {
+        cache: "no-store",
+        signal: ctrl.signal
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.text();
+    } finally {
+      clearTimeout(t);
+    }
   }
 
   async function fetchFeedWithFallbacks(feedUrl) {
-    // Try direct first
+    // Try direct first (some feeds might allow it)
     try {
       const text = await fetchText(feedUrl);
       const titles = parseRssTitles(text);
       if (titles.length) return titles;
-    } catch (e) {
-      // ignore, try proxies
+    } catch (_) {
+      // ignore
     }
 
     // Try proxies
@@ -98,7 +106,7 @@
         const text = await fetchText(proxyFn(feedUrl));
         const titles = parseRssTitles(text);
         if (titles.length) return titles;
-      } catch (e) {
+      } catch (_) {
         // keep trying
       }
     }
@@ -112,9 +120,9 @@
 
     el.textContent = text || "No headlines available";
 
-    // Restart animation cleanly
+    // restart animation
     el.style.animation = "none";
-    void el.offsetHeight; // force reflow
+    void el.offsetHeight;
     el.style.animation = "";
   }
 
@@ -129,7 +137,7 @@
     if (seconds > MAX_SECONDS) seconds = MAX_SECONDS;
 
     el.style.animationDuration = `${seconds}s`;
-    console.log(`🕒 ticker duration set to ~${Math.round(seconds)}s for ${len} chars`);
+    console.log(`🕒 ticker duration ~${Math.round(seconds)}s (${len} chars)`);
   }
 
   function loadCachedLine() {
@@ -162,6 +170,12 @@
 
     try {
       const results = await Promise.allSettled(FEEDS.map(fetchFeedWithFallbacks));
+
+      // Helpful debug: see which feeds worked
+      results.forEach((r, i) => {
+        const count = r.status === "fulfilled" ? r.value.length : 0;
+        console.log(`🧪 feed[${i}] titles:`, count, FEEDS[i]);
+      });
 
       const titles = results
         .filter((r) => r.status === "fulfilled")
