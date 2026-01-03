@@ -1,17 +1,16 @@
-console.log("✅ sheets.js loaded (SCHEDULE FIXED)");
+console.log("✅ sheets.js loaded (REPAIR MODE)");
 
 // ===============================
-// CONFIG — put your published CSV links here
+// CONFIG
 // ===============================
 const SCHEDULE_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vQYXP1-d_DgHENUnWizMZeEN2jsz9y4z5lmfSmN9ktm0Bwseu52-j2_WYaXaurEVk56RDG9KK6ieQPp/pub?output=csv";
 
-// If you also have published CSVs for these, drop them in:
-const ANNOUNCEMENTS_URL = window.ANNOUNCEMENTS_URL || ""; // optional
-const STATUS_URL = window.STATUS_URL || ""; // optional
+const ANNOUNCEMENTS_URL = window.ANNOUNCEMENTS_URL || "";
+const STATUS_URL = window.STATUS_URL || "";
 
 // ===============================
-// CSV PARSER (handles quotes + commas inside cells)
+// CSV PARSER (real CSV w/ quotes)
 // ===============================
 function parseCSV(text) {
   const rows = [];
@@ -19,7 +18,6 @@ function parseCSV(text) {
   let cell = "";
   let inQuotes = false;
 
-  // normalize newlines
   text = (text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 
   for (let i = 0; i < text.length; i++) {
@@ -27,7 +25,6 @@ function parseCSV(text) {
     const next = text[i + 1];
 
     if (ch === '"') {
-      // doubled quote inside quoted string -> literal quote
       if (inQuotes && next === '"') {
         cell += '"';
         i++;
@@ -54,11 +51,9 @@ function parseCSV(text) {
     cell += ch;
   }
 
-  // last cell
   row.push(cell);
   rows.push(row);
 
-  // trim cells
   return rows.map(r => r.map(c => (c ?? "").toString().trim()));
 }
 
@@ -69,6 +64,31 @@ async function loadCSV(url) {
   if (!res.ok) throw new Error(`CSV HTTP ${res.status}`);
   const text = await res.text();
   return parseCSV(text).filter(r => r.some(c => String(c || "").trim() !== ""));
+}
+
+// ===============================
+// REPAIR YOUR "ALL DATA IN COL A" ROWS
+// Example row you posted:
+// "2026-01-01,Thursday,North,J. Lamb,ALS,07:30,07:30,",,,,,,,
+// ===============================
+function repairRowIfNeeded(row) {
+  if (!row || !row.length) return row;
+
+  const first = (row[0] || "").trim();
+  if (!first) return row;
+
+  const restEmpty = row.slice(1).every(c => !String(c || "").trim());
+  const looksLikePacked = /^\d{4}-\d{2}-\d{2},/.test(first) && first.includes(",");
+
+  if (restEmpty && looksLikePacked) {
+    // Split the packed cell into columns
+    const parts = first.split(",").map(s => s.trim());
+    // Ensure we have at least 8 columns (Date..Code)
+    while (parts.length < 8) parts.push("");
+    return parts.slice(0, 8);
+  }
+
+  return row;
 }
 
 // ===============================
@@ -87,13 +107,16 @@ function normalizeDateCell(v) {
   return m ? m[0] : "";
 }
 
+function safeGet(row, idx) {
+  return idx == null ? "" : (row[idx] || "").toString().trim();
+}
+
 function buildHeaderIndexMap(headerRow) {
   const map = {};
   headerRow.forEach((h, idx) => {
     const key = String(h || "").trim().toLowerCase();
     if (!key) return;
 
-    // allow flexible header naming
     if (key === "date") map.date = idx;
     if (key === "day") map.day = idx;
     if (key === "area") map.area = idx;
@@ -104,10 +127,6 @@ function buildHeaderIndexMap(headerRow) {
     if (key === "code") map.code = idx;
   });
   return map;
-}
-
-function safeGet(row, idx) {
-  return idx == null ? "" : (row[idx] || "").toString().trim();
 }
 
 // ===============================
@@ -133,17 +152,22 @@ async function loadSchedule() {
     return;
   }
 
-  // detect header row
+  // header detection
   const headerLooksLikeHeader = rows[0].some(c =>
     ["date", "day", "area", "name", "level"].includes(String(c).toLowerCase())
   );
 
-  const headerRow = headerLooksLikeHeader ? rows[0] : ["Date", "Day", "Area", "Name", "Level", "Shift Start", "Shift End", "Code"];
-  const dataRows = headerLooksLikeHeader ? rows.slice(1) : rows;
+  const headerRow = headerLooksLikeHeader
+    ? rows[0]
+    : ["Date", "Day", "Area", "Name", "Level", "Shift Start", "Shift End", "Code"];
+
+  // repair each data row if needed
+  const rawDataRows = headerLooksLikeHeader ? rows.slice(1) : rows;
+  const dataRows = rawDataRows.map(repairRowIfNeeded);
 
   const idx = buildHeaderIndexMap(headerRow);
 
-  // fallback positions if we didn't detect headers
+  // fallback indexes
   if (idx.date == null) idx.date = 0;
   if (idx.day == null) idx.day = 1;
   if (idx.area == null) idx.area = 2;
@@ -158,16 +182,16 @@ async function loadSchedule() {
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowKey = ymdLocal(tomorrow);
 
-  // filter today + tomorrow
   const matches = dataRows.filter(r => {
     const d = normalizeDateCell(safeGet(r, idx.date));
     return d === todayKey || d === tomorrowKey;
   });
 
-  console.log("📅 schedule rows sample:", dataRows.slice(0, 5));
+  console.log("📅 schedule rows sample (repaired):", dataRows.slice(0, 5));
   console.log("✅ matches for today/tomorrow:", { todayKey, tomorrowKey, count: matches.length });
 
-  // render header
+  // Build a real table (thead/tbody)
+  table.innerHTML = "";
   const thead = document.createElement("thead");
   const trh = document.createElement("tr");
   ["Date", "Day", "Area", "Name", "Level", "Start", "End", "Code"].forEach(t => {
@@ -218,7 +242,7 @@ async function loadSchedule() {
 }
 
 // ===============================
-// ANNOUNCEMENTS (kept working)
+// ANNOUNCEMENTS
 // ===============================
 async function loadAnnouncements() {
   const list = document.getElementById("announcements-list");
@@ -237,7 +261,7 @@ async function loadAnnouncements() {
     return;
   }
 
-  // remove header if present
+  // strip header if present
   if (rows[0] && rows[0].some(c => String(c).toLowerCase().includes("active"))) {
     rows = rows.slice(1);
   }
@@ -285,7 +309,6 @@ async function loadStatus() {
 
   try {
     const rows = await loadCSV(STATUS_URL);
-    // Expect first cell to contain status text
     const status = rows?.[0]?.[0]?.trim();
     if (status) el.textContent = status;
   } catch (e) {
@@ -300,7 +323,6 @@ loadSchedule();
 loadAnnouncements();
 loadStatus();
 
-// refresh schedule occasionally
 setInterval(loadSchedule, 5 * 60 * 1000);
 setInterval(loadAnnouncements, 5 * 60 * 1000);
 setInterval(loadStatus, 60 * 1000);
