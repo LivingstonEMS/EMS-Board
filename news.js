@@ -52,7 +52,7 @@ function setTicker(line) {
 
   // Compute duration based on text length
   const len = full.length;
-  const dynamic = BASE_SECONDS + (len / 100) * SECONDS_PER_100_CHARS;
+  const dynamic = BASE_SECONDS = 60 + (len / 100) * SECONDS_PER_100_CHARS = 12;
 
   el.style.animationDuration = `${Math.round(dynamic)}s`;
 
