@@ -4,7 +4,6 @@ console.log("✅ sheets.js loaded");
    Google Sheets Admin Integration
    =============================== */
 
-// Published CSV URLs (yours)
 const ANNOUNCEMENTS_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vSjU3xZI4zsPk0ECZHaFKWKZjdvTdVWk3X4VcYlNh9OV00SHwzuT0TsABo3xzdjJnwo5jci80SJgkhe/pub?output=csv";
 
@@ -65,13 +64,8 @@ function parseCSV(text) {
   return rows;
 }
 
-// Some rows may come in as a single cell separated by tabs (rare copy/paste weirdness)
 function normalizeRow(r) {
-  if (!r) return [];
-  if (r.length === 1 && String(r[0]).includes("\t")) {
-    return String(r[0]).split("\t").map((x) => x.trim());
-  }
-  return r.map((x) => String(x ?? "").trim());
+  return (r || []).map((x) => String(x ?? "").trim());
 }
 
 async function loadCSV(url) {
@@ -81,15 +75,14 @@ async function loadCSV(url) {
 
   const all = parseCSV(text.trim()).map(normalizeRow);
 
-  // Drop header row if present
-  return all.slice(1);
+  return all.slice(1); // drop header
 }
 
 /* -------------------------------
    Helpers
 --------------------------------- */
 
-// ✅ LOCAL date key (fixes your Today/Tomorrow bug)
+// ✅ LOCAL date key
 function yyyyMmDdLocal(d) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -101,6 +94,13 @@ function addDaysLocal(d, days) {
   const x = new Date(d);
   x.setDate(x.getDate() + days);
   return x;
+}
+
+// ✅ Extract YYYY-MM-DD from messy input like "2026-01-02 00:00:00" or BOM
+function cleanDate(raw) {
+  const s = String(raw || "").replace(/^\uFEFF/, "").trim();
+  const m = s.match(/\d{4}-\d{2}-\d{2}/);
+  return m ? m[0] : s;
 }
 
 function normArea(area) {
@@ -142,7 +142,6 @@ async function loadAnnouncements() {
       let text = "";
       let activeVal = "";
 
-      // Handles both: [Text, Active] or [Active, Text]
       if (looksActive(c0) && c1) {
         activeVal = c0;
         text = c1;
@@ -177,17 +176,11 @@ async function loadStatus() {
     const banner = document.getElementById("status-banner");
     if (!banner) return;
 
-    // Expect either:
-    // [Status, Message]  e.g. NORMAL,Normal Operations
-    // or just [Message]
     const r0 = rows[0] || [];
     const status = (r0[0] || "").trim();
     const message = (r0[1] || r0[0] || "Normal Operations").trim();
 
-    // Show message only (keeps it clean)
     banner.textContent = message;
-
-    // Optional: add class for styling like status-normal/status-alert
     banner.dataset.status = status.toLowerCase();
   } catch (e) {
     console.warn("🧾 status failed:", e);
@@ -200,6 +193,12 @@ async function loadSchedule() {
     const rows = await loadCSV(SCHEDULE_URL);
     console.log("📅 schedule rows sample:", rows.slice(0, 5));
 
+    // 🔎 Debug: show the first few raw date cells
+    console.log(
+      "📅 schedule date cells (raw → cleaned):",
+      rows.slice(0, 10).map((r) => [r[0], cleanDate(r[0])])
+    );
+
     const table = document.getElementById("schedule-table");
     if (!table) return;
 
@@ -211,7 +210,7 @@ async function loadSchedule() {
 
     const entries = rows
       .map((r) => ({
-        date: (r[0] || "").trim(),
+        date: cleanDate(r[0]),
         day: (r[1] || "").trim(),
         area: normArea(r[2]),
         name: (r[3] || "").trim(),
@@ -228,7 +227,6 @@ async function loadSchedule() {
       count: entries.length
     });
 
-    // Header row (optional – remove if you already have a <thead> in HTML)
     const header = document.createElement("tr");
     header.innerHTML = `
       <th>Day</th>
@@ -247,7 +245,6 @@ async function loadSchedule() {
       return;
     }
 
-    // Sort by date then area then start
     entries.sort((a, b) => {
       if (a.date !== b.date) return a.date.localeCompare(b.date);
       if (a.area !== b.area) return a.area.localeCompare(b.area);
@@ -257,7 +254,6 @@ async function loadSchedule() {
     entries.forEach((e) => {
       const tr = document.createElement("tr");
 
-      // ✅ add classes so CSS can color them
       if (e.area === "North") tr.classList.add("row-north");
       if (e.area === "South") tr.classList.add("row-south");
 
@@ -285,4 +281,4 @@ async function refreshAll() {
 }
 
 refreshAll();
-setInterval(refreshAll, 60 * 1000); // refresh every 60s
+setInterval(refreshAll, 60 * 1000);
