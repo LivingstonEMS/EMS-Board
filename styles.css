@@ -199,9 +199,8 @@ html, body {
 .tornado-sub, .tornado-sub2 { font-size: 1.5em; }
 
 /* ===============================
-   NEWS TICKER (FIXED + SLOW)
-   - No duplicate keyframes
-   - Animation is controlled by JS via animation-duration
+   NEWS TICKER (FINAL)
+   - JS sets: --ticker-end and animation-duration
 ================================ */
 #global-ticker {
   position: fixed;
@@ -224,18 +223,20 @@ html, body {
   white-space: nowrap;
   font-size: 1.6em;
   will-change: transform;
-
-  /* Start off-screen (right) */
   transform: translateX(100%);
-
-  /* Animation ON by default */
-  animation: tickerScroll 240s linear infinite;
 }
 
-/* One single keyframes definition */
-@keyframes tickerScroll {
+/* Keyframes uses JS-provided end distance */
+@keyframes tickerScrollFinal {
   from { transform: translateX(100%); }
-  to   { transform: translateX(-100%); }
+  to   { transform: translateX(var(--ticker-end, -200%)); }
+}
+
+/* Animation is applied by JS using this class */
+#news-content.ticking-final {
+  animation-name: tickerScrollFinal;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
 }
 /* ===============================
    TOPBAR CONTROLS (Prev/Next)
