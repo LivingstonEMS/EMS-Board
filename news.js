@@ -1,7 +1,14 @@
 (() => {
   "use strict";
 
-  console.log("✅ news.js loaded");
+  // Prevent double-loading (common on GitHub Pages when cache + reload happens)
+  if (window.__EMS_NEWS_LOADED__) {
+    console.warn("📰 news.js already loaded — skipping re-init");
+    return;
+  }
+  window.__EMS_NEWS_LOADED__ = true;
+
+  console.log("✅ news.js loaded (FINAL)");
 
   // ===============================
   // FEEDS (RSS)
@@ -11,10 +18,11 @@
     "https://www.ems1.com/rss/",
     "https://www.jems.com/feed/",
 
-    // LOCAL / REGIONAL (Google News RSS)
+    // LOCAL / REGIONAL (Google News RSS - reliable on GitHub Pages)
     "https://news.google.com/rss/search?q=Livingston%20County%20Kentucky&hl=en-US&gl=US&ceid=US:en",
     "https://news.google.com/rss/search?q=Paducah%20Kentucky&hl=en-US&gl=US&ceid=US:en",
-    "https://news.google.com/rss/search?q=KY%20EMS&hl=en-US&gl=US&ceid=US:en",
+    "https://news.google.com/rss/search?q=Kentucky%20EMS&hl=en-US&gl=US&ceid=US:en",
+    "https://news.google.com/rss/search?q=Western%20Kentucky&hl=en-US&gl=US&ceid=US:en",
 
     // National backup
     "https://rss.nytimes.com/services/xml/rss/nyt/US.xml"
@@ -23,35 +31,39 @@
   // ===============================
   // PROXIES (fallbacks for CORS + downtime)
   // ===============================
-  // Added codetabs proxy + timeouts so nothing hangs forever.
   const PROXIES = [
     (u) => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
     (u) => "https://corsproxy.io/?" + encodeURIComponent(u),
     (u) => "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(u),
-    (u) => "https://r.jina.ai/http://" + u.replace(/^https?:\/\//, "")
+    (u) => "https://r.jina.ai/http://" + u.replace(/^https?:\/\//, "") // returns page as text
   ];
 
   // ===============================
-  // TICKER TUNING
+  // TICKER TUNING (SLOWER)
   // ===============================
-  const MAX_HEADLINES = 100;
+  const MAX_HEADLINES = 80;
 
   // Lower = slower
-  const CHARS_PER_SECOND = 3.0;
+  // If you want even slower, drop to 1.5 or 1.2
+  const CHARS_PER_SECOND = 2.0;
 
-  // Clamp duration
-  const MIN_SECONDS = 180; // 3 minutes
-  const MAX_SECONDS = 420; // 7 minutes
+  // Clamp duration (overall scroll time)
+  const MIN_SECONDS = 240; // 4 minutes minimum
+  const MAX_SECONDS = 540; // 9 minutes max
 
   // If a proxy/feed hangs, kill it
-  const FETCH_TIMEOUT_MS = 8000;
+  const FETCH_TIMEOUT_MS = 9000;
 
   // Cache so if feeds fail you still show something
-  const CACHE_KEY = "ems_board_headlines_cache_v1";
+  const CACHE_KEY = "ems_board_headlines_cache_v2";
 
   // ===============================
   // Helpers
   // ===============================
+  function getEl() {
+    return document.getElementById("news-content");
+  }
+
   function stripHtml(s) {
     return (s || "")
       .replace(/<!\[CDATA\[|\]\]>/g, "")
@@ -63,15 +75,17 @@
   function parseRssTitles(xmlText) {
     const doc = new DOMParser().parseFromString(xmlText, "text/xml");
 
-    const rssItems = Array.from(doc.querySelectorAll("item > title")).map((n) =>
+    // RSS: <item><title>
+    const rss = Array.from(doc.querySelectorAll("item > title")).map((n) =>
       stripHtml(n.textContent || "")
     );
 
-    const atomItems = Array.from(doc.querySelectorAll("entry > title")).map((n) =>
+    // Atom: <entry><title>
+    const atom = Array.from(doc.querySelectorAll("entry > title")).map((n) =>
       stripHtml(n.textContent || "")
     );
 
-    return [...rssItems, ...atomItems].filter(Boolean);
+    return [...rss, ...atom].filter(Boolean);
   }
 
   async function fetchText(url) {
@@ -79,10 +93,7 @@
     const t = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
 
     try {
-      const res = await fetch(url, {
-        cache: "no-store",
-        signal: ctrl.signal
-      });
+      const res = await fetch(url, { cache: "no-store", signal: ctrl.signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return await res.text();
     } finally {
@@ -91,43 +102,39 @@
   }
 
   async function fetchFeedWithFallbacks(feedUrl) {
-    // Try direct first (some feeds might allow it)
+    // Direct first
     try {
       const text = await fetchText(feedUrl);
       const titles = parseRssTitles(text);
       if (titles.length) return titles;
-    } catch (_) {
-      // ignore
-    }
+    } catch (_) {}
 
-    // Try proxies
+    // Proxies
     for (const proxyFn of PROXIES) {
       try {
         const text = await fetchText(proxyFn(feedUrl));
         const titles = parseRssTitles(text);
         if (titles.length) return titles;
-      } catch (_) {
-        // keep trying
-      }
+      } catch (_) {}
     }
 
     return [];
   }
 
   function setTickerText(text) {
-    const el = document.getElementById("news-content");
+    const el = getEl();
     if (!el) return;
 
     el.textContent = text || "No headlines available";
 
-    // restart animation
+    // Restart animation cleanly
     el.style.animation = "none";
     void el.offsetHeight;
     el.style.animation = "";
   }
 
   function setTickerSpeedByText(text) {
-    const el = document.getElementById("news-content");
+    const el = getEl();
     if (!el) return;
 
     const len = (text || "").length || 1;
@@ -154,28 +161,35 @@
   function saveCachedLine(line) {
     try {
       localStorage.setItem(CACHE_KEY, JSON.stringify({ line, ts: Date.now() }));
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 
   // ===============================
   // Main
   // ===============================
   async function loadHeadlines() {
-    const el = document.getElementById("news-content");
-    if (el && (!el.textContent || el.textContent.trim() === "")) {
+    // Ensure element exists (if defer is missing, this prevents a dead start)
+    const el = getEl();
+    if (!el) {
+      console.warn("📰 #news-content not found yet — retrying soon");
+      setTimeout(loadHeadlines, 800);
+      return;
+    }
+
+    // Always make speed slow even during loading
+    setTickerSpeedByText("Loading headlines…");
+
+    // Show cached immediately if available (so you never stare at Loading)
+    const cachedNow = loadCachedLine();
+    if (cachedNow) setTickerText(cachedNow);
+
+    // If nothing cached, show loading
+    if (!el.textContent || el.textContent.trim() === "") {
       setTickerText("Loading headlines…");
     }
 
     try {
       const results = await Promise.allSettled(FEEDS.map(fetchFeedWithFallbacks));
-
-      // Helpful debug: see which feeds worked
-      results.forEach((r, i) => {
-        const count = r.status === "fulfilled" ? r.value.length : 0;
-        console.log(`🧪 feed[${i}] titles:`, count, FEEDS[i]);
-      });
 
       const titles = results
         .filter((r) => r.status === "fulfilled")
