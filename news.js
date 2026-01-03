@@ -11,8 +11,8 @@ const FEEDS = [
 const PROXY = "https://api.allorigins.win/raw?url=";
 
 // Settings
-const MAX_HEADLINES = 25;
-const TICKER_SECONDS = 35; // slower = more readable
+const MAX_HEADLINES = 100;
+const TICKER_SECONDS = 120; // slower = more readable
 let lastTickerText = "";
 
 function stripHtml(s) {
