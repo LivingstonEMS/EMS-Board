@@ -1,20 +1,62 @@
 console.log("✅ news.js loaded");
 
-// RSS feeds
+// ===============================
+// FEEDS
+// ===============================
 const FEEDS = [
   "https://www.ems1.com/rss/",
   "https://www.jems.com/feed/",
   "https://rss.nytimes.com/services/xml/rss/nyt/US.xml"
 ];
 
-// CORS proxy (sometimes flaky — but you said that’s fine for now)
-const PROXY = "https://api.allorigins.win/raw?url=";
-
 const MAX_HEADLINES = 25;
 
-// Speed controls (tweak these)
-const BASE_SECONDS = 45;     // minimum scroll duration
-const SECONDS_PER_100_CHARS = 8; // slower = bigger number
+// ✅ your 4-minute full scroll
+const TARGET_SCROLL_SECONDS = 240;
+const SPACER = "     •     ";
+
+// ===============================
+// PROXIES (AllOrigins can fail randomly)
+// ===============================
+const PROXIES = [
+  (u) => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
+  (u) => "https://r.jina.ai/http/" + u.replace(/^https?:\/\//, ""), // super reliable text proxy
+  (u) => "https://r.jina.ai/https/" + u.replace(/^https?:\/\//, "")
+];
+
+// ===============================
+// HELPERS
+// ===============================
+function $(id) {
+  return document.getElementById(id);
+}
+
+function restartTicker(el) {
+  el.style.animation = "none";
+  void el.offsetHeight; // force reflow
+  el.style.animation = "";
+}
+
+function setTicker(line) {
+  const el = $("news-content");
+  const wrap = $("global-ticker");
+
+  if (!el || !wrap) {
+    console.warn("📰 Missing #news-content or #global-ticker in HTML");
+    return;
+  }
+
+  const base = (line && String(line).trim()) || "Headlines unavailable";
+  const full = base + SPACER + base + SPACER + base;
+
+  el.textContent = full;
+
+  requestAnimationFrame(() => {
+    // keep your fixed full-scroll time
+    el.style.animationDuration = `${TARGET_SCROLL_SECONDS}s`;
+    restartTicker(el);
+  });
+}
 
 function stripHtml(s) {
   return (s || "")
@@ -32,57 +74,68 @@ function parseRssTitles(xmlText) {
     .filter(Boolean);
 }
 
-async function fetchFeed(url) {
-  const res = await fetch(PROXY + encodeURIComponent(url), { cache: "no-store" });
-  if (!res.ok) throw new Error(`Feed HTTP ${res.status}`);
-  const text = await res.text();
-  return parseRssTitles(text);
-}
-
-function setTicker(line) {
-  const el = document.getElementById("news-content");
-  const wrap = document.getElementById("global-ticker");
-  if (!el || !wrap) return;
-
-  // Make it loop smoothly by repeating the string with spacing
-  const spacer = "     •     ";
-  const full = (line || "No headlines available") + spacer + (line || "No headlines available");
-
-  el.textContent = full;
-
-  // Compute duration based on text length
-  const len = full.length;
-  const dynamic = BASE_SECONDS = 60 + (len / 100) * SECONDS_PER_100_CHARS = 12;
-
-  el.style.animationDuration = `${Math.round(dynamic)}s`;
-
-  // Restart animation cleanly
-  el.style.animation = "none";
-  void el.offsetHeight;
-  el.style.animation = "";
-}
-
-async function loadHeadlines() {
+async function fetchTextWithFallback(url) {
+  // try direct first (sometimes works)
   try {
-    const results = await Promise.allSettled(FEEDS.map(fetchFeed));
+    const r0 = await fetch(url, { cache: "no-store" });
+    if (r0.ok) return await r0.text();
+  } catch (_) {}
+
+  // try proxies in order
+  for (const make of PROXIES) {
+    try {
+      const proxyUrl = make(url);
+      const r = await fetch(proxyUrl, { cache: "no-store" });
+      if (!r.ok) continue;
+      const txt = await r.text();
+      if (txt && txt.length > 50) return txt;
+    } catch (_) {}
+  }
+
+  throw new Error("All proxies failed");
+}
+
+async function fetchFeedTitles(feedUrl) {
+  const xmlText = await fetchTextWithFallback(feedUrl);
+  const titles = parseRssTitles(xmlText);
+  return titles;
+}
+
+// ===============================
+// MAIN
+// ===============================
+async function loadHeadlines() {
+  // ✅ Always replace "Loading..." immediately so you never get stuck
+  setTicker("Loading headlines…");
+
+  try {
+    const results = await Promise.allSettled(FEEDS.map(fetchFeedTitles));
+
     const titles = results
       .filter((r) => r.status === "fulfilled")
       .flatMap((r) => r.value);
 
     const unique = Array.from(new Set(titles)).slice(0, MAX_HEADLINES);
+
     if (!unique.length) throw new Error("No headlines parsed");
 
-    const line = unique.join("  |  ");
-    setTicker(line);
-
+    setTicker(unique.join("  |  "));
     console.log(`📰 Loaded ${unique.length} headlines`);
   } catch (e) {
     console.warn("📰 Headlines failed:", e);
-    setTicker("Headlines unavailable • Check internet / feed sources");
+    setTicker("Headlines unavailable • Proxy/feed error");
   }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+function initNews() {
+  // ✅ run immediately no matter where script is included
   loadHeadlines();
   setInterval(loadHeadlines, 15 * 60 * 1000);
-});
+}
+
+// Run now if DOM already ready, otherwise on DOMContentLoaded
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initNews);
+} else {
+  initNews();
+}
