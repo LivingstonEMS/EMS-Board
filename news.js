@@ -1,69 +1,65 @@
 (() => {
   "use strict";
 
-  // Prevent double-loading (common on GitHub Pages when cache + reload happens)
-  if (window.__EMS_NEWS_LOADED__) {
-    console.warn("📰 news.js already loaded — skipping re-init");
-    return;
-  }
-  window.__EMS_NEWS_LOADED__ = true;
-
   console.log("✅ news.js loaded (FINAL)");
 
   // ===============================
   // FEEDS (RSS)
   // ===============================
+  // NOTE: We will NOT try direct fetch anymore (it’s what’s throwing CORS/403/404).
   const FEEDS = [
-    // EMS
-    "https://www.ems1.com/rss/",
+    // EMS / Industry
     "https://www.jems.com/feed/",
+    // EMS1 RSS often changes / blocks – if it fails, it won’t break anything
+    "https://www.ems1.com/rss/",
 
-    // LOCAL / REGIONAL (Google News RSS - reliable on GitHub Pages)
+    // Local / Regional (Google News RSS)
     "https://news.google.com/rss/search?q=Livingston%20County%20Kentucky&hl=en-US&gl=US&ceid=US:en",
     "https://news.google.com/rss/search?q=Paducah%20Kentucky&hl=en-US&gl=US&ceid=US:en",
-    "https://news.google.com/rss/search?q=Kentucky%20EMS&hl=en-US&gl=US&ceid=US:en",
     "https://news.google.com/rss/search?q=Western%20Kentucky&hl=en-US&gl=US&ceid=US:en",
+    "https://news.google.com/rss/search?q=Kentucky%20EMS&hl=en-US&gl=US&ceid=US:en",
 
     // National backup
     "https://rss.nytimes.com/services/xml/rss/nyt/US.xml"
   ];
 
   // ===============================
-  // PROXIES (fallbacks for CORS + downtime)
+  // PROXIES (fallbacks)
+  // Put the most reliable FIRST.
   // ===============================
   const PROXIES = [
-    (u) => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
-    (u) => "https://corsproxy.io/?" + encodeURIComponent(u),
+    // This one is usually the most consistent on GH Pages:
     (u) => "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(u),
-    (u) => "https://r.jina.ai/http://" + u.replace(/^https?:\/\//, "") // returns page as text
+
+    // Often works, sometimes rate-limits:
+    (u) => "https://corsproxy.io/?" + encodeURIComponent(u),
+
+    // Flaky lately (500s), keep as last resort:
+    (u) => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u)
   ];
 
   // ===============================
-  // TICKER TUNING (SLOWER)
+  // TICKER TUNING
   // ===============================
   const MAX_HEADLINES = 80;
 
-  // Lower = slower
-  // If you want even slower, drop to 1.5 or 1.2
-  const CHARS_PER_SECOND = 2.0;
+  // Slower = smaller number
+  // You said ~4 minutes full scroll felt right; we’ll bias slower.
+  const CHARS_PER_SECOND = 2.2;
 
-  // Clamp duration (overall scroll time)
+  // Clamp duration
   const MIN_SECONDS = 240; // 4 minutes minimum
-  const MAX_SECONDS = 540; // 9 minutes max
+  const MAX_SECONDS = 720; // 12 minutes maximum
 
-  // If a proxy/feed hangs, kill it
-  const FETCH_TIMEOUT_MS = 9000;
+  // Timeout per request (don’t hang forever)
+  const FETCH_TIMEOUT_MS = 8000;
 
-  // Cache so if feeds fail you still show something
+  // Cache so you never stare at "Loading..." for long
   const CACHE_KEY = "ems_board_headlines_cache_v2";
 
   // ===============================
   // Helpers
   // ===============================
-  function getEl() {
-    return document.getElementById("news-content");
-  }
-
   function stripHtml(s) {
     return (s || "")
       .replace(/<!\[CDATA\[|\]\]>/g, "")
@@ -75,12 +71,12 @@
   function parseRssTitles(xmlText) {
     const doc = new DOMParser().parseFromString(xmlText, "text/xml");
 
-    // RSS: <item><title>
+    // RSS
     const rss = Array.from(doc.querySelectorAll("item > title")).map((n) =>
       stripHtml(n.textContent || "")
     );
 
-    // Atom: <entry><title>
+    // Atom
     const atom = Array.from(doc.querySelectorAll("entry > title")).map((n) =>
       stripHtml(n.textContent || "")
     );
@@ -101,28 +97,22 @@
     }
   }
 
-  async function fetchFeedWithFallbacks(feedUrl) {
-    // Direct first
-    try {
-      const text = await fetchText(feedUrl);
-      const titles = parseRssTitles(text);
-      if (titles.length) return titles;
-    } catch (_) {}
-
-    // Proxies
+  async function fetchFeed(feedUrl) {
+    // Try proxies in order — no direct fetch.
     for (const proxyFn of PROXIES) {
       try {
         const text = await fetchText(proxyFn(feedUrl));
         const titles = parseRssTitles(text);
         if (titles.length) return titles;
-      } catch (_) {}
+      } catch (_) {
+        // keep going
+      }
     }
-
     return [];
   }
 
   function setTickerText(text) {
-    const el = getEl();
+    const el = document.getElementById("news-content");
     if (!el) return;
 
     el.textContent = text || "No headlines available";
@@ -130,11 +120,11 @@
     // Restart animation cleanly
     el.style.animation = "none";
     void el.offsetHeight;
-    el.style.animation = "";
+    el.style.animation = "tickerScroll 240s linear infinite";
   }
 
   function setTickerSpeedByText(text) {
-    const el = getEl();
+    const el = document.getElementById("news-content");
     if (!el) return;
 
     const len = (text || "").length || 1;
@@ -161,67 +151,51 @@
   function saveCachedLine(line) {
     try {
       localStorage.setItem(CACHE_KEY, JSON.stringify({ line, ts: Date.now() }));
-    } catch {}
+    } catch {
+      // ignore
+    }
   }
 
   // ===============================
   // Main
   // ===============================
   async function loadHeadlines() {
-    // Ensure element exists (if defer is missing, this prevents a dead start)
-    const el = getEl();
-    if (!el) {
-      console.warn("📰 #news-content not found yet — retrying soon");
-      setTimeout(loadHeadlines, 800);
-      return;
-    }
-
-    // Always make speed slow even during loading
-    setTickerSpeedByText("Loading headlines…");
-
-    // Show cached immediately if available (so you never stare at Loading)
-    const cachedNow = loadCachedLine();
-    if (cachedNow) setTickerText(cachedNow);
-
-    // If nothing cached, show loading
-    if (!el.textContent || el.textContent.trim() === "") {
+    // Show cached immediately (so you never sit on Loading)
+    const cached = loadCachedLine();
+    if (cached) {
+      setTickerText(cached);
+      setTickerSpeedByText(cached);
+    } else {
       setTickerText("Loading headlines…");
+      setTickerSpeedByText("Loading headlines…");
     }
 
-    try {
-      const results = await Promise.allSettled(FEEDS.map(fetchFeedWithFallbacks));
+    const results = await Promise.allSettled(FEEDS.map(fetchFeed));
+    const titles = results
+      .filter((r) => r.status === "fulfilled")
+      .flatMap((r) => r.value);
 
-      const titles = results
-        .filter((r) => r.status === "fulfilled")
-        .flatMap((r) => r.value);
+    const unique = Array.from(new Set(titles))
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .slice(0, MAX_HEADLINES);
 
-      const unique = Array.from(new Set(titles))
-        .map((t) => t.trim())
-        .filter(Boolean)
-        .slice(0, MAX_HEADLINES);
-
-      if (!unique.length) throw new Error("No headlines parsed (all feeds failed)");
-
-      const line = unique.join("  |  ");
-      setTickerText(line);
-      setTickerSpeedByText(line);
-      saveCachedLine(line);
-
-      console.log(`📰 Loaded ${unique.length} headlines`);
-    } catch (e) {
-      console.warn("📰 Headlines failed:", e);
-
-      const cached = loadCachedLine();
-      if (cached) {
-        setTickerText(cached);
-        setTickerSpeedByText(cached);
-        console.log("📰 Using cached headlines");
-      } else {
+    if (!unique.length) {
+      console.warn("📰 All feeds failed — keeping cached headlines if available.");
+      if (!cached) {
         const fallback = "Headlines unavailable • Check internet / feed sources";
         setTickerText(fallback);
         setTickerSpeedByText(fallback);
       }
+      return;
     }
+
+    const line = unique.join("  |  ");
+    setTickerText(line);
+    setTickerSpeedByText(line);
+    saveCachedLine(line);
+
+    console.log(`📰 Loaded ${unique.length} headlines`);
   }
 
   loadHeadlines();
