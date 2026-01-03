@@ -307,5 +307,5 @@ loadAnnouncements();
 loadStatus();
 
 setInterval(loadSchedule, 5 * 60 * 1000);
-setInterval(loadAnnouncements, 5 * 60 * 1000);
+setInterval(loadAnnouncements, 60 * 1000); // refresh every minute
 setInterval(loadStatus, 60 * 1000);
