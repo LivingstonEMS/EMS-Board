@@ -1,18 +1,20 @@
 console.log("✅ news.js loaded");
 
-// Mix of EMS + Local sources (RSS)
+// RSS feeds
 const FEEDS = [
   "https://www.ems1.com/rss/",
   "https://www.jems.com/feed/",
-  "https://www.wpsdlocal6.com/search/?f=rss&t=article&c=news",
   "https://rss.nytimes.com/services/xml/rss/nyt/US.xml"
 ];
 
-// Proxy to avoid CORS (NOTE: this proxy sometimes has outages)
+// CORS proxy (sometimes flaky — but you said that’s fine for now)
 const PROXY = "https://api.allorigins.win/raw?url=";
 
-// How many headlines total to show
 const MAX_HEADLINES = 25;
+
+// Speed controls (tweak these)
+const BASE_SECONDS = 45;     // minimum scroll duration
+const SECONDS_PER_100_CHARS = 8; // slower = bigger number
 
 function stripHtml(s) {
   return (s || "")
@@ -37,60 +39,50 @@ async function fetchFeed(url) {
   return parseRssTitles(text);
 }
 
-function setTickerText(text) {
+function setTicker(line) {
   const el = document.getElementById("news-content");
-  if (!el) return;
+  const wrap = document.getElementById("global-ticker");
+  if (!el || !wrap) return;
 
-  el.textContent = text || "No headlines available";
+  // Make it loop smoothly by repeating the string with spacing
+  const spacer = "     •     ";
+  const full = (line || "No headlines available") + spacer + (line || "No headlines available");
+
+  el.textContent = full;
+
+  // Compute duration based on text length
+  const len = full.length;
+  const dynamic = BASE_SECONDS + (len / 100) * SECONDS_PER_100_CHARS;
+
+  el.style.animationDuration = `${Math.round(dynamic)}s`;
 
   // Restart animation cleanly
   el.style.animation = "none";
-  void el.offsetHeight; // force reflow
+  void el.offsetHeight;
   el.style.animation = "";
-}
-
-/**
- * Auto-speed: longer text scrolls slower so it's always readable.
- * - Minimum 90s
- * - Typical 110-180s depending on length
- */
-function setTickerSpeedFromText(text) {
-  const el = document.getElementById("news-content");
-  if (!el) return;
-
-  const len = (text || "").length;
-
-  // 10-12 chars/sec feels readable for a wall board
-  const seconds = Math.max(90, Math.ceil(len / 10));
-  el.style.animationDuration = `${seconds}s`;
-
-  console.log("📰 ticker duration set to:", seconds, "seconds");
 }
 
 async function loadHeadlines() {
   try {
     const results = await Promise.allSettled(FEEDS.map(fetchFeed));
-
     const titles = results
       .filter((r) => r.status === "fulfilled")
       .flatMap((r) => r.value);
 
     const unique = Array.from(new Set(titles)).slice(0, MAX_HEADLINES);
-
     if (!unique.length) throw new Error("No headlines parsed");
 
     const line = unique.join("  |  ");
-    setTickerText(line);
-    setTickerSpeedFromText(line);
+    setTicker(line);
 
     console.log(`📰 Loaded ${unique.length} headlines`);
   } catch (e) {
     console.warn("📰 Headlines failed:", e);
-    const fallback = "Headlines unavailable • Check internet / feed sources";
-    setTickerText(fallback);
-    setTickerSpeedFromText(fallback);
+    setTicker("Headlines unavailable • Check internet / feed sources");
   }
 }
 
-loadHeadlines();
-setInterval(loadHeadlines, 15 * 60 * 1000);
+document.addEventListener("DOMContentLoaded", () => {
+  loadHeadlines();
+  setInterval(loadHeadlines, 15 * 60 * 1000);
+});

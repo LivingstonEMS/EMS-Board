@@ -1,76 +1,69 @@
 console.log("✅ slides.js loaded");
-setInterval(() => console.log("⏱️ slide tick"), 5000);
-// Slide rotation (every 10 seconds) + Pause/Resume button
+
+// ===============================
+// Slide rotation + manual controls
+// ===============================
+let slides = [];
 let currentSlide = 0;
-const rotationMs = 10000;
-let timer = null;
-let paused = false;
 
-function slides() {
-  return Array.from(document.querySelectorAll(".slide"));
-}
+// Auto-advance time (seconds)
+const AUTO_SECONDS = 30;
 
-function showSlide(i) {
-  const s = slides();
-  if (!s.length) return;
+let autoTimer = null;
 
-  s.forEach((el) => el.classList.remove("active"));
-  currentSlide = (i + s.length) % s.length;
-  s[currentSlide].classList.add("active");
+function showSlide(index) {
+  if (!slides.length) return;
+
+  slides.forEach((s) => s.classList.remove("active"));
+
+  currentSlide = (index + slides.length) % slides.length;
+  slides[currentSlide].classList.add("active");
+
+  // Reset auto timer whenever user manually moves
+  restartAuto();
 }
 
 function nextSlide() {
   showSlide(currentSlide + 1);
 }
 
-function start() {
-  stop();
-  timer = setInterval(() => {
-    if (!paused) nextSlide();
-  }, rotationMs);
+function prevSlide() {
+  showSlide(currentSlide - 1);
 }
 
-function stop() {
-  if (timer) clearInterval(timer);
-  timer = null;
+function restartAuto() {
+  if (autoTimer) clearInterval(autoTimer);
+  autoTimer = setInterval(() => {
+    console.log("⏱️ slide tick");
+    showSlide(currentSlide + 1);
+  }, AUTO_SECONDS * 1000);
 }
 
-function hookPause() {
-  const btn = document.getElementById("pauseBtn");
-  if (!btn) return;
+function wireControls() {
+  // Button (if present)
+  const nextBtn = document.getElementById("next-slide");
+  if (nextBtn) nextBtn.addEventListener("click", nextSlide);
 
-  btn.addEventListener("click", () => {
-    paused = !paused;
-    btn.classList.toggle("paused", paused);
-    btn.textContent = paused ? "▶️ Resume" : "⏸️ Pause";
+  const prevBtn = document.getElementById("prev-slide");
+  if (prevBtn) prevBtn.addEventListener("click", prevSlide);
+
+  // Keyboard controls
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowRight" || e.key === "PageDown") nextSlide();
+    if (e.key === "ArrowLeft" || e.key === "PageUp") prevSlide();
   });
 }
 
-// Debug helper: shows slide number briefly in the top bar so you know it's rotating
-function setDebug(text) {
-  const banner = document.getElementById("status-banner");
-  if (!banner) return;
-  banner.dataset.original = banner.dataset.original || banner.textContent;
-  banner.textContent = text;
-  setTimeout(() => {
-    banner.textContent = banner.dataset.original || banner.textContent;
-  }, 900);
+function initSlides() {
+  slides = Array.from(document.querySelectorAll(".slide"));
+  if (!slides.length) return;
+
+  // show first
+  showSlide(0);
+
+  // wire controls + start auto
+  wireControls();
+  restartAuto();
 }
 
-window.addEventListener("load", () => {
-  const s = slides();
-  if (!s.length) return;
-
-  // Find initial active slide
-  currentSlide = s.findIndex((el) => el.classList.contains("active"));
-  if (currentSlide < 0) currentSlide = 0;
-
-  // Force exactly one active
-  showSlide(currentSlide);
-
-  hookPause();
-  start();
-
-  // Prove rotation is alive
-  setDebug("Slides: rotation ON");
-});
+document.addEventListener("DOMContentLoaded", initSlides);
