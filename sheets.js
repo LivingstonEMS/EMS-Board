@@ -1,147 +1,167 @@
 console.log("✅ sheets.js loaded");
 
-/* ===============================
-   Google Sheets Admin Integration
-   =============================== */
+/**
+ * ✅ IMPORTANT:
+ * These URLs must be the *published CSV* URLs (output=csv).
+ * Example:
+ * https://docs.google.com/spreadsheets/d/e/.../pub?gid=0&single=true&output=csv
+ */
+const STATUS_URL = window.STATUS_URL || ""; // optional
+const ANNOUNCEMENTS_URL = window.ANNOUNCEMENTS_URL || "";
+const SCHEDULE_URL = window.SCHEDULE_URL || "";
 
-const ANNOUNCEMENTS_URL =
-  "https://docs.google.com/spreadsheets/d/e/2PACX-1vSjU3xZI4zsPk0ECZHaFKWKZjdvTdVWk3X4VcYlNh9OV00SHwzuT0TsABo3xzdjJnwo5jci80SJgkhe/pub?output=csv";
-
-const SCHEDULE_URL =
-  "https://docs.google.com/spreadsheets/d/e/2PACX-1vQYXP1-d_DgHENUnWizMZeEN2jsz9y4z5lmfSmN9ktm0Bwseu52-j2_WYaXaurEVk56RDG9KK6ieQPp/pub?output=csv";
-
-const STATUS_URL =
-  "https://docs.google.com/spreadsheets/d/e/2PACX-1vRKMYW3E7RImjEQV253Vj7bPtQYUI2HrYUoyh9TeqkrfdaYGqKbGWe83voMA6VGRruLvo-zSPx1_FaH/pub?output=csv";
-
-/* -------------------------------
-   CSV Parser (handles quoted commas)
---------------------------------- */
+// ---------- CSV HELPERS (handles quoted CSV properly) ----------
 function parseCSV(text) {
+  // Robust CSV parse with quotes, commas, newlines
   const rows = [];
   let row = [];
-  let cell = "";
+  let cur = "";
   let inQuotes = false;
 
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
     const next = text[i + 1];
 
-    if (ch === '"' && inQuotes && next === '"') {
-      cell += '"';
-      i++;
-      continue;
-    }
-
     if (ch === '"') {
-      inQuotes = !inQuotes;
+      if (inQuotes && next === '"') {
+        // escaped quote
+        cur += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
       continue;
     }
 
-    if (ch === "," && !inQuotes) {
-      row.push(cell.trim());
-      cell = "";
+    if (!inQuotes && ch === ",") {
+      row.push(cur);
+      cur = "";
       continue;
     }
 
-    if ((ch === "\n" || ch === "\r") && !inQuotes) {
+    if (!inQuotes && (ch === "\n" || ch === "\r")) {
+      // handle CRLF
       if (ch === "\r" && next === "\n") i++;
-      row.push(cell.trim());
-      cell = "";
-
-      if (row.length > 1 || (row[0] || "").trim() !== "") rows.push(row);
+      row.push(cur);
+      cur = "";
+      // avoid adding totally empty trailing row
+      const isEmpty = row.every((c) => String(c || "").trim() === "");
+      if (!isEmpty) rows.push(row);
       row = [];
       continue;
     }
 
-    cell += ch;
+    cur += ch;
   }
 
-  if (cell.length || row.length) {
-    row.push(cell.trim());
-    if (row.length > 1 || (row[0] || "").trim() !== "") rows.push(row);
-  }
+  // last cell
+  row.push(cur);
+  const isEmpty = row.every((c) => String(c || "").trim() === "");
+  if (!isEmpty) rows.push(row);
 
-  return rows;
-}
-
-function normalizeRow(r) {
-  return (r || []).map((x) => String(x ?? "").trim());
+  // trim cells
+  return rows.map((r) => r.map((c) => String(c ?? "").trim()));
 }
 
 async function loadCSV(url) {
+  if (!url) return [];
   const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(`CSV HTTP ${res.status} for ${url}`);
+  if (!res.ok) throw new Error(`CSV HTTP ${res.status}`);
   const text = await res.text();
-
-  const all = parseCSV(text.trim()).map(normalizeRow);
-
-  return all.slice(1); // drop header
+  return parseCSV(text);
 }
 
-/* -------------------------------
-   Helpers
---------------------------------- */
+// If Google Sheets exported a single cell that contains the entire comma row,
+// split it safely into columns.
+function normalizeRowMaybeSingleCell(row, expectedCols = 0) {
+  if (!row || !row.length) return row;
 
-// ✅ LOCAL date key
-function yyyyMmDdLocal(d) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  // Single-cell but looks like CSV data inside it
+  if (row.length === 1 && row[0].includes(",")) {
+    // Split on commas (this is safe here because we already parsed CSV quoting;
+    // if it's one cell, the commas are literally part of that cell text)
+    const parts = row[0].split(",").map((x) => String(x || "").trim());
+    if (expectedCols && parts.length >= expectedCols) return parts;
+    return parts;
+  }
+
+  return row;
 }
 
-function addDaysLocal(d, days) {
-  const x = new Date(d);
-  x.setDate(x.getDate() + days);
-  return x;
-}
-
-// ✅ Extract YYYY-MM-DD from messy input like "2026-01-02 00:00:00" or BOM
-function cleanDate(raw) {
-  const s = String(raw || "").replace(/^\uFEFF/, "").trim();
+function cleanDateKey(v) {
+  // Remove stray quotes and keep YYYY-MM-DD if present
+  const s = String(v || "").trim().replace(/^"+|"+$/g, "");
+  // If contains time or extra, grab date part
   const m = s.match(/\d{4}-\d{2}-\d{2}/);
   return m ? m[0] : s;
 }
 
-function normArea(area) {
-  const a = (area || "").trim().toLowerCase();
-  if (a.startsWith("n")) return "North";
-  if (a.startsWith("s")) return "South";
-  return (area || "").trim();
+function todayTomorrowKeys() {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+
+  const toKey = (d) => {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  return { todayKey: toKey(today), tomorrowKey: toKey(tomorrow) };
 }
 
-function fmtTime(t) {
-  if (!t) return "";
-  const parts = String(t).trim().split(":");
-  if (parts.length < 2) return String(t).trim();
-  const hh = String(parts[0]).padStart(2, "0");
-  const mm = String(parts[1]).padStart(2, "0");
-  return `${hh}:${mm}`;
-}
+// ---------- STATUS ----------
+async function loadStatus() {
+  if (!STATUS_URL) return;
 
-function looksActive(v) {
-  const a = String(v || "").trim().toUpperCase();
-  return a === "TRUE" || a === "YES" || a === "1" || a === "Y" || a === "ON";
-}
-
-/* ---------------- Announcements ---------------- */
-async function loadAnnouncements() {
   try {
-    const rows = await loadCSV(ANNOUNCEMENTS_URL);
-    console.log("📣 announcements rows sample:", rows.slice(0, 5));
+    const rows = await loadCSV(STATUS_URL);
+    console.log("🧾 status rows sample:", rows.slice(0, 1));
+
+    const el = document.getElementById("status-text");
+    if (!el) return;
+
+    // Expect either:
+    // [StatusText] OR [StatusText, Active] etc — keep it simple:
+    const first = rows.find((r) => r.some((c) => String(c).trim() !== ""));
+    if (!first) return;
+
+    const text = (first[0] || "").trim();
+    el.textContent = text || "NORMAL";
+  } catch (e) {
+    console.warn("🧾 status failed:", e);
+  }
+}
+
+// ---------- ANNOUNCEMENTS ----------
+async function loadAnnouncements() {
+  if (!ANNOUNCEMENTS_URL) return;
+
+  try {
+    const rowsRaw = await loadCSV(ANNOUNCEMENTS_URL);
+    console.log("📣 announcements rows sample:", rowsRaw.slice(0, 3));
 
     const list = document.getElementById("announcements-list");
     if (!list) return;
 
     list.innerHTML = "";
 
-    rows.forEach((r) => {
-      const c0 = (r[0] || "").trim();
-      const c1 = (r[1] || "").trim();
+    const looksActive = (v) => {
+      const a = String(v || "").trim().toUpperCase();
+      return a === "TRUE" || a === "YES" || a === "1" || a === "Y" || a === "ON";
+    };
+
+    rowsRaw.forEach((r0) => {
+      const r = normalizeRowMaybeSingleCell(r0, 2);
+      const c0 = (r[0] || "").trim().replace(/^"+|"+$/g, "");
+      const c1 = (r[1] || "").trim().replace(/^"+|"+$/g, "");
 
       let text = "";
       let activeVal = "";
 
+      // If first column looks like active, swap
       if (looksActive(c0) && c1) {
         activeVal = c0;
         text = c1;
@@ -164,121 +184,140 @@ async function loadAnnouncements() {
     }
   } catch (e) {
     console.warn("📣 announcements failed:", e);
+    const list = document.getElementById("announcements-list");
+    if (list) {
+      list.innerHTML = `<li>No announcements</li>`;
+    }
   }
 }
 
-/* ---------------- Status banner ---------------- */
-async function loadStatus() {
-  try {
-    const rows = await loadCSV(STATUS_URL);
-    console.log("🧾 status rows sample:", rows.slice(0, 5));
-
-    const banner = document.getElementById("status-banner");
-    if (!banner) return;
-
-    const r0 = rows[0] || [];
-    const status = (r0[0] || "").trim();
-    const message = (r0[1] || r0[0] || "Normal Operations").trim();
-
-    banner.textContent = message;
-    banner.dataset.status = status.toLowerCase();
-  } catch (e) {
-    console.warn("🧾 status failed:", e);
-  }
-}
-
-/* ---------------- Schedule (Today + Tomorrow) ---------------- */
+// ---------- SCHEDULE ----------
 async function loadSchedule() {
-  try {
-    const rows = await loadCSV(SCHEDULE_URL);
-    console.log("📅 schedule rows sample:", rows.slice(0, 5));
+  if (!SCHEDULE_URL) return;
 
-    // 🔎 Debug: show the first few raw date cells
-    console.log(
-      "📅 schedule date cells (raw → cleaned):",
-      rows.slice(0, 10).map((r) => [r[0], cleanDate(r[0])])
+  try {
+    const rowsRaw = await loadCSV(SCHEDULE_URL);
+
+    // Drop totally empty rows
+    const rowsClean = rowsRaw.filter((r) =>
+      r.some((c) => String(c || "").trim() !== "")
     );
 
-    const table = document.getElementById("schedule-table");
-    if (!table) return;
+    // Normalize possible one-cell rows
+    const rows = rowsClean.map((r) => normalizeRowMaybeSingleCell(r, 7));
 
-    table.innerHTML = "";
+    console.log("📅 schedule rows sample:", rows.slice(0, 5));
 
-    const now = new Date();
-    const todayKey = yyyyMmDdLocal(now);
-    const tomorrowKey = yyyyMmDdLocal(addDaysLocal(now, 1));
+    // If first row is header, detect it
+    const header = rows[0] || [];
+    const headerLooksLike =
+      header.join(" ").toLowerCase().includes("date") ||
+      header.join(" ").toLowerCase().includes("shift");
 
-    const entries = rows
-      .map((r) => ({
-        date: cleanDate(r[0]),
-        day: (r[1] || "").trim(),
-        area: normArea(r[2]),
-        name: (r[3] || "").trim(),
-        level: (r[4] || "").trim(),
-        start: fmtTime(r[5]),
-        end: fmtTime(r[6]),
-        code: (r[7] || "").trim()
-      }))
-      .filter((e) => e.date === todayKey || e.date === tomorrowKey);
+    const data = headerLooksLike ? rows.slice(1) : rows;
 
+    const { todayKey, tomorrowKey } = todayTomorrowKeys();
+
+    // Indices based on your sheet:
+    // Date | Day | Area | Name | Level | Shift Start | Shift End | Code
+    const IDX = {
+      date: 0,
+      day: 1,
+      area: 2,
+      name: 3,
+      level: 4,
+      start: 5,
+      end: 6,
+      code: 7
+    };
+
+    // Build matches for today + tomorrow
+    const matches = [];
+    const debugDates = [];
+
+    data.forEach((r) => {
+      const dateKey = cleanDateKey(r[IDX.date]);
+      if (debugDates.length < 10) debugDates.push([r[IDX.date], dateKey]);
+
+      if (dateKey === todayKey || dateKey === tomorrowKey) {
+        matches.push({
+          dateKey,
+          day: (r[IDX.day] || "").trim(),
+          area: (r[IDX.area] || "").trim(),
+          name: (r[IDX.name] || "").trim(),
+          level: (r[IDX.level] || "").trim(),
+          start: (r[IDX.start] || "").trim(),
+          end: (r[IDX.end] || "").trim(),
+          code: (r[IDX.code] || "").trim()
+        });
+      }
+    });
+
+    console.log("📅 schedule date cells (raw → cleaned):", debugDates);
     console.log("✅ matches for today/tomorrow:", {
       todayKey,
       tomorrowKey,
-      count: entries.length
+      count: matches.length
     });
 
-    const header = document.createElement("tr");
-    header.innerHTML = `
-      <th>Day</th>
-      <th>Area</th>
-      <th>Name</th>
-      <th>Level</th>
-      <th>Shift</th>
-      <th>Code</th>
-    `;
-    table.appendChild(header);
+    const tbody = document.getElementById("schedule-body");
+    if (!tbody) return;
 
-    if (!entries.length) {
+    tbody.innerHTML = "";
+
+    if (!matches.length) {
+      // Fallback message row
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td colspan="6">No schedule posted for Today/Tomorrow</td>`;
-      table.appendChild(tr);
+      tr.innerHTML = `<td colspan="6" style="padding:12px; opacity:.85;">No schedule posted for Today/Tomorrow</td>`;
+      tbody.appendChild(tr);
       return;
     }
 
-    entries.sort((a, b) => {
-      if (a.date !== b.date) return a.date.localeCompare(b.date);
-      if (a.area !== b.area) return a.area.localeCompare(b.area);
-      return (a.start || "").localeCompare(b.start || "");
+    // Sort: today first, then tomorrow; within date keep North then South
+    const areaRank = (a) => (String(a).toLowerCase() === "north" ? 0 : 1);
+
+    matches.sort((a, b) => {
+      if (a.dateKey !== b.dateKey) return a.dateKey.localeCompare(b.dateKey);
+      return areaRank(a.area) - areaRank(b.area);
     });
 
-    entries.forEach((e) => {
+    matches.forEach((m) => {
       const tr = document.createElement("tr");
 
-      if (e.area === "North") tr.classList.add("row-north");
-      if (e.area === "South") tr.classList.add("row-south");
+      const areaLower = m.area.toLowerCase();
+      if (areaLower === "north") tr.classList.add("area-north");
+      if (areaLower === "south") tr.classList.add("area-south");
 
-      const shift = e.start && e.end ? `${e.start}–${e.end}` : "";
+      // Shift display: show start-end like 07:30–19:30
+      const shift = m.start && m.end ? `${m.start}–${m.end}` : (m.start || m.end || "");
 
       tr.innerHTML = `
-        <td>${e.day || ""}</td>
-        <td>${e.area || ""}</td>
-        <td>${e.name || ""}</td>
-        <td>${e.level || ""}</td>
+        <td>${m.day || ""}</td>
+        <td>${m.area || ""}</td>
+        <td>${m.name || ""}</td>
+        <td>${m.level || ""}</td>
         <td>${shift}</td>
-        <td>${e.code || ""}</td>
+        <td>${m.code || ""}</td>
       `;
 
-      table.appendChild(tr);
+      tbody.appendChild(tr);
     });
   } catch (e) {
     console.warn("📅 schedule failed:", e);
+    const tbody = document.getElementById("schedule-body");
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="6" style="padding:12px; opacity:.85;">Schedule unavailable</td></tr>`;
+    }
   }
 }
 
-/* ---------------- Boot ---------------- */
-async function refreshAll() {
-  await Promise.allSettled([loadStatus(), loadAnnouncements(), loadSchedule()]);
-}
+// ---------- INIT ----------
+loadStatus();
+loadAnnouncements();
+loadSchedule();
 
-refreshAll();
-setInterval(refreshAll, 60 * 1000);
+// Refresh schedule + announcements every 10 min
+setInterval(() => {
+  loadAnnouncements();
+  loadSchedule();
+}, 10 * 60 * 1000);
