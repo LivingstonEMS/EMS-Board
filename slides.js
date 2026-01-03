@@ -1,69 +1,79 @@
-console.log("✅ slides.js loaded");
+(() => {
+  "use strict";
 
-// ===============================
-// Slide rotation + manual controls
-// ===============================
-let slides = [];
-let currentSlide = 0;
+  console.log("✅ slides.js loaded (FINAL)");
 
-// Auto-advance time (seconds)
-const AUTO_SECONDS = 30;
+  // ===============================
+  // Slide rotation + manual controls
+  // ===============================
+  let slides = [];
+  let currentSlide = 0;
 
-let autoTimer = null;
+  // Auto-advance time (seconds)
+  const AUTO_SECONDS = 30;
 
-function showSlide(index) {
-  if (!slides.length) return;
+  let autoTimer = null;
 
-  slides.forEach((s) => s.classList.remove("active"));
+  function setActive(index) {
+    if (!slides.length) return;
 
-  currentSlide = (index + slides.length) % slides.length;
-  slides[currentSlide].classList.add("active");
+    slides.forEach((s) => s.classList.remove("active"));
 
-  // Reset auto timer whenever user manually moves
-  restartAuto();
-}
+    currentSlide = (index + slides.length) % slides.length;
+    slides[currentSlide].classList.add("active");
+  }
 
-function nextSlide() {
-  showSlide(currentSlide + 1);
-}
+  function restartAuto() {
+    if (autoTimer) clearInterval(autoTimer);
 
-function prevSlide() {
-  showSlide(currentSlide - 1);
-}
+    autoTimer = setInterval(() => {
+      console.log("⏱️ slide tick");
+      // IMPORTANT: do NOT restart timer on auto ticks
+      setActive(currentSlide + 1);
+    }, AUTO_SECONDS * 1000);
+  }
 
-function restartAuto() {
-  if (autoTimer) clearInterval(autoTimer);
-  autoTimer = setInterval(() => {
-    console.log("⏱️ slide tick");
-    showSlide(currentSlide + 1);
-  }, AUTO_SECONDS * 1000);
-}
+  function nextSlide() {
+    setActive(currentSlide + 1);
+    restartAuto(); // reset timer after manual use
+  }
 
-function wireControls() {
-  // Button (if present)
-  const nextBtn = document.getElementById("next-slide");
-  if (nextBtn) nextBtn.addEventListener("click", nextSlide);
+  function prevSlide() {
+    setActive(currentSlide - 1);
+    restartAuto(); // reset timer after manual use
+  }
 
-  const prevBtn = document.getElementById("prev-slide");
-  if (prevBtn) prevBtn.addEventListener("click", prevSlide);
+  function wireControls() {
+    // Buttons (if present)
+    const nextBtn = document.getElementById("next-slide");
+    if (nextBtn) nextBtn.addEventListener("click", nextSlide);
 
-  // Keyboard controls
-  window.addEventListener("keydown", (e) => {
-    if (e.key === "ArrowRight" || e.key === "PageDown") nextSlide();
-    if (e.key === "ArrowLeft" || e.key === "PageUp") prevSlide();
-  });
-}
+    const prevBtn = document.getElementById("prev-slide");
+    if (prevBtn) prevBtn.addEventListener("click", prevSlide);
 
-function initSlides() {
-  slides = Array.from(document.querySelectorAll(".slide"));
-  if (!slides.length) return;
+    // Keyboard controls
+    window.addEventListener("keydown", (e) => {
+      // ignore if typing in inputs
+      const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
+      if (tag === "input" || tag === "textarea") return;
 
-  // show first
-  showSlide(0);
+      if (e.key === "ArrowRight" || e.key === "PageDown") nextSlide();
+      if (e.key === "ArrowLeft" || e.key === "PageUp") prevSlide();
+    });
+  }
 
-  // wire controls + start auto
-  wireControls();
-  restartAuto();
-}
+  function initSlides() {
+    slides = Array.from(document.querySelectorAll(".slide"));
+    if (!slides.length) {
+      console.warn("⚠️ No .slide elements found");
+      return;
+    }
 
-document.addEventListener("DOMContentLoaded", initSlides);
+    // Show first slide and start
+    setActive(0);
+    wireControls();
+    restartAuto();
+  }
+
+  document.addEventListener("DOMContentLoaded", initSlides);
+})();

@@ -246,3 +246,36 @@ html, body {
   animation-iteration-count: infinite;
   animation-duration: 120s; /* default slow */
 }
+/* ===============================
+   TOPBAR CONTROLS (Prev/Next)
+================================ */
+#controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+#controls button {
+  font-size: 1.05em;
+  padding: 10px 14px;
+  background: #1e90ff;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+#controls button:hover {
+  background: #1875d1;
+}
+
+#controls button:active {
+  transform: scale(0.98);
+}
+
+#controls button:focus {
+  outline: 2px solid rgba(30, 144, 255, 0.7);
+  outline-offset: 2px;
+}
