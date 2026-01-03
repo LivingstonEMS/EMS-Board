@@ -1,70 +1,57 @@
-(function () {
-  // If this file gets loaded twice, don't re-init.
-  if (window.__EMS_NEWS_LOADED__) {
-    console.log("ℹ️ news.js already initialized — skipping duplicate load");
-    return;
-  }
-  window.__EMS_NEWS_LOADED__ = true;
+(() => {
+  "use strict";
 
   console.log("✅ news.js loaded");
 
   // ===============================
-  // FEEDS
+  // FEEDS (RSS)
   // ===============================
+  // Local news via Google News RSS is the most reliable “local” source on GitHub Pages.
+  // You can tweak these search queries any time.
   const FEEDS = [
+    // EMS
     "https://www.ems1.com/rss/",
     "https://www.jems.com/feed/",
+
+    // LOCAL / REGIONAL (Google News RSS)
+    "https://news.google.com/rss/search?q=Livingston%20County%20Kentucky&hl=en-US&gl=US&ceid=US:en",
+    "https://news.google.com/rss/search?q=Paducah%20Kentucky&hl=en-US&gl=US&ceid=US:en",
+    "https://news.google.com/rss/search?q=KY%20EMS&hl=en-US&gl=US&ceid=US:en",
+
+    // National backup
     "https://rss.nytimes.com/services/xml/rss/nyt/US.xml"
   ];
 
-  const MAX_HEADLINES = 25;
-
-  // ✅ 4-minute full scroll
-  const TARGET_SCROLL_SECONDS = 240;
-  const SPACER = "     •     ";
-
   // ===============================
-  // PROXIES (inside closure = no global collisions)
+  // PROXIES (fallbacks for CORS + downtime)
   // ===============================
+  // These sometimes fail depending on their own uptime, so we try several.
   const PROXIES = [
     (u) => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
-    (u) => "https://r.jina.ai/http/" + u.replace(/^https?:\/\//, ""),
-    (u) => "https://r.jina.ai/https/" + u.replace(/^https?:\/\//, "")
+    (u) => "https://corsproxy.io/?" + encodeURIComponent(u),
+    (u) => "https://r.jina.ai/http://" + u.replace(/^https?:\/\//, "") // returns page as text
   ];
 
   // ===============================
-  // HELPERS
+  // TICKER TUNING
   // ===============================
-  function $(id) {
-    return document.getElementById(id);
-  }
+  const MAX_HEADLINES = 25;
 
-  function restartTicker(el) {
-    el.style.animation = "none";
-    void el.offsetHeight; // force reflow
-    el.style.animation = "";
-  }
+  // Target how fast it moves:
+  // Lower CHARS_PER_SECOND = slower ticker.
+  // For ~4 minutes full scroll, CHARS_PER_SECOND around 2.5–3.5 usually feels right.
+  const CHARS_PER_SECOND = 3.0;
 
-  function setTicker(line) {
-    const el = $("news-content");
-    const wrap = $("global-ticker");
+  // Clamp duration so it’s never too fast / too slow
+  const MIN_SECONDS = 120;  // at least 2 minutes
+  const MAX_SECONDS = 300;  // at most 5 minutes (tweak if you want even slower)
 
-    if (!el || !wrap) {
-      console.warn("📰 Missing #news-content or #global-ticker in HTML");
-      return;
-    }
+  // Cache so if feeds fail you still show something
+  const CACHE_KEY = "ems_board_headlines_cache_v1";
 
-    const base = (line && String(line).trim()) || "Headlines unavailable";
-    const full = base + SPACER + base + SPACER + base;
-
-    el.textContent = full;
-
-    requestAnimationFrame(() => {
-      el.style.animationDuration = `${TARGET_SCROLL_SECONDS}s`;
-      restartTicker(el);
-    });
-  }
-
+  // ===============================
+  // Helpers
+  // ===============================
   function stripHtml(s) {
     return (s || "")
       .replace(/<!\[CDATA\[|\]\]>/g, "")
@@ -75,71 +62,140 @@
 
   function parseRssTitles(xmlText) {
     const doc = new DOMParser().parseFromString(xmlText, "text/xml");
-    const items = Array.from(doc.querySelectorAll("item"));
-    return items
-      .map((it) => stripHtml(it.querySelector("title")?.textContent || ""))
-      .filter(Boolean);
+
+    // RSS: <item><title>...
+    const rssItems = Array.from(doc.querySelectorAll("item > title")).map((n) =>
+      stripHtml(n.textContent || "")
+    );
+
+    // Atom: <entry><title>...
+    const atomItems = Array.from(doc.querySelectorAll("entry > title")).map((n) =>
+      stripHtml(n.textContent || "")
+    );
+
+    return [...rssItems, ...atomItems].filter(Boolean);
   }
 
-  async function fetchTextWithFallback(url) {
-    // try direct first
-    try {
-      const r0 = await fetch(url, { cache: "no-store" });
-      if (r0.ok) return await r0.text();
-    } catch (_) {}
+  async function fetchText(url) {
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.text();
+  }
 
-    // try proxies
-    for (const make of PROXIES) {
-      try {
-        const proxyUrl = make(url);
-        const r = await fetch(proxyUrl, { cache: "no-store" });
-        if (!r.ok) continue;
-        const txt = await r.text();
-        if (txt && txt.length > 50) return txt;
-      } catch (_) {}
+  async function fetchFeedWithFallbacks(feedUrl) {
+    // Try direct first
+    try {
+      const text = await fetchText(feedUrl);
+      const titles = parseRssTitles(text);
+      if (titles.length) return titles;
+    } catch (e) {
+      // ignore, try proxies
     }
 
-    throw new Error("All proxies failed");
+    // Try proxies
+    for (const proxyFn of PROXIES) {
+      try {
+        const text = await fetchText(proxyFn(feedUrl));
+        const titles = parseRssTitles(text);
+        if (titles.length) return titles;
+      } catch (e) {
+        // keep trying
+      }
+    }
+
+    return [];
   }
 
-  async function fetchFeedTitles(feedUrl) {
-    const xmlText = await fetchTextWithFallback(feedUrl);
-    return parseRssTitles(xmlText);
+  function setTickerText(text) {
+    const el = document.getElementById("news-content");
+    if (!el) return;
+
+    el.textContent = text || "No headlines available";
+
+    // Restart animation cleanly
+    el.style.animation = "none";
+    void el.offsetHeight; // force reflow
+    el.style.animation = "";
+  }
+
+  function setTickerSpeedByText(text) {
+    const el = document.getElementById("news-content");
+    if (!el) return;
+
+    const len = (text || "").length || 1;
+    let seconds = len / CHARS_PER_SECOND;
+
+    if (seconds < MIN_SECONDS) seconds = MIN_SECONDS;
+    if (seconds > MAX_SECONDS) seconds = MAX_SECONDS;
+
+    el.style.animationDuration = `${seconds}s`;
+    console.log(`🕒 ticker duration set to ~${Math.round(seconds)}s for ${len} chars`);
+  }
+
+  function loadCachedLine() {
+    try {
+      const raw = localStorage.getItem(CACHE_KEY);
+      if (!raw) return "";
+      const parsed = JSON.parse(raw);
+      return parsed?.line || "";
+    } catch {
+      return "";
+    }
+  }
+
+  function saveCachedLine(line) {
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ line, ts: Date.now() }));
+    } catch {
+      // ignore
+    }
   }
 
   // ===============================
-  // MAIN
+  // Main
   // ===============================
   async function loadHeadlines() {
-    // ✅ never stuck on loading
-    setTicker("Loading headlines…");
+    const el = document.getElementById("news-content");
+    if (el && (!el.textContent || el.textContent.trim() === "")) {
+      setTickerText("Loading headlines…");
+    }
 
     try {
-      const results = await Promise.allSettled(FEEDS.map(fetchFeedTitles));
+      const results = await Promise.allSettled(FEEDS.map(fetchFeedWithFallbacks));
 
       const titles = results
         .filter((r) => r.status === "fulfilled")
         .flatMap((r) => r.value);
 
-      const unique = Array.from(new Set(titles)).slice(0, MAX_HEADLINES);
-      if (!unique.length) throw new Error("No headlines parsed");
+      const unique = Array.from(new Set(titles))
+        .map((t) => t.trim())
+        .filter(Boolean)
+        .slice(0, MAX_HEADLINES);
 
-      setTicker(unique.join("  |  "));
+      if (!unique.length) throw new Error("No headlines parsed (all feeds failed)");
+
+      const line = unique.join("  |  ");
+      setTickerText(line);
+      setTickerSpeedByText(line);
+      saveCachedLine(line);
+
       console.log(`📰 Loaded ${unique.length} headlines`);
     } catch (e) {
       console.warn("📰 Headlines failed:", e);
-      setTicker("Headlines unavailable • Proxy/feed error");
+
+      const cached = loadCachedLine();
+      if (cached) {
+        setTickerText(cached);
+        setTickerSpeedByText(cached);
+        console.log("📰 Using cached headlines");
+      } else {
+        const fallback = "Headlines unavailable • Check internet / feed sources";
+        setTickerText(fallback);
+        setTickerSpeedByText(fallback);
+      }
     }
   }
 
-  function initNews() {
-    loadHeadlines();
-    setInterval(loadHeadlines, 15 * 60 * 1000);
-  }
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initNews);
-  } else {
-    initNews();
-  }
+  loadHeadlines();
+  setInterval(loadHeadlines, 15 * 60 * 1000);
 })();
