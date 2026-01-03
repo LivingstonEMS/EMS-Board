@@ -247,28 +247,37 @@ async function loadSchedule() {
 async function loadAnnouncements() {
   const list = document.getElementById("announcements-list");
   if (!list) {
-    console.warn("📣 announcements-list element not found in HTML");
+    console.warn("📣 announcements-list element not found");
     return;
   }
 
-  list.innerHTML = "<li>Loading…</li>";
+  list.innerHTML = "<li>Loading announcements…</li>";
 
   try {
     const res = await fetch(ANNOUNCEMENTS_URL, { cache: "no-store" });
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status} ${res.statusText}`);
+    }
+
     const text = await res.text();
 
-    // parseCSV returns ALL rows including header
-    const all = parseCSV(text.trim());
+    // If Google is returning HTML (not CSV), catch it clearly
+    if (text.trim().startsWith("<!DOCTYPE") || text.includes("<html")) {
+      throw new Error("Got HTML instead of CSV. Check: publish to web + output=csv URL.");
+    }
 
+    const all = parseCSV(text.trim());
     console.log("📣 announcements ALL rows:", all);
 
-    // Find column indexes by header names (Active, text)
+    if (!all.length) throw new Error("CSV empty");
+
     const header = all[0].map(h => String(h).trim().toLowerCase());
     const activeIdx = header.indexOf("active");
     const textIdx = header.indexOf("text");
 
     if (activeIdx === -1 || textIdx === -1) {
-      throw new Error(`Header missing. Found: ${header.join(", ")}`);
+      throw new Error(`Missing header columns. Found: ${header.join(", ")}`);
     }
 
     const rows = all.slice(1);
@@ -288,14 +297,11 @@ async function loadAnnouncements() {
       }
     });
 
-    if (!added) {
-      list.innerHTML = "<li>No announcements</li>";
-    }
+    if (!added) list.innerHTML = "<li>No announcements</li>";
 
-    console.log("📣 announcements rendered:", added);
   } catch (err) {
     console.warn("📣 loadAnnouncements failed:", err);
-    list.innerHTML = "<li>Announcements unavailable</li>";
+    list.innerHTML = `<li>Announcements unavailable (${err.message})</li>`;
   }
 }
 
