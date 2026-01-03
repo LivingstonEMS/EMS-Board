@@ -246,73 +246,56 @@ async function loadSchedule() {
 // ===============================
 async function loadAnnouncements() {
   const list = document.getElementById("announcements-list");
-  if (!list || !ANNOUNCEMENTS_URL) return;
-
-  list.innerHTML = "";
-
-  let rows = [];
-  try {
-    rows = await loadCSV(ANNOUNCEMENTS_URL);
-  } catch (e) {
-    console.warn("📣 announcements load failed:", e);
-    const li = document.createElement("li");
-    li.textContent = "Announcements unavailable";
-    list.appendChild(li);
+  if (!list) {
+    console.warn("📣 announcements-list element not found in HTML");
     return;
   }
 
-  // strip header if present
-  if (rows[0] && rows[0].some(c => String(c).toLowerCase().includes("active"))) {
-    rows = rows.slice(1);
-  }
-
-  const looksActive = (v) => {
-    const a = String(v || "").trim().toUpperCase();
-    return a === "TRUE" || a === "YES" || a === "1" || a === "Y" || a === "ON";
-  };
-
-  rows.forEach((r) => {
-    const c0 = (r[0] || "").trim();
-    const c1 = (r[1] || "").trim();
-
-    let text = "";
-    let activeVal = "";
-
-    if (looksActive(c0) && c1) {
-      activeVal = c0;
-      text = c1;
-    } else {
-      text = c0;
-      activeVal = c1;
-    }
-
-    if (looksActive(activeVal) && text) {
-      const li = document.createElement("li");
-      li.textContent = text;
-      list.appendChild(li);
-    }
-  });
-
-  if (!list.children.length) {
-    const li = document.createElement("li");
-    li.textContent = "No announcements";
-    list.appendChild(li);
-  }
-}
-
-// ===============================
-// STATUS (optional)
-// ===============================
-async function loadStatus() {
-  const el = document.getElementById("status-banner");
-  if (!el || !STATUS_URL) return;
+  list.innerHTML = "<li>Loading…</li>";
 
   try {
-    const rows = await loadCSV(STATUS_URL);
-    const status = rows?.[0]?.[0]?.trim();
-    if (status) el.textContent = status;
-  } catch (e) {
-    console.warn("🧾 status load failed:", e);
+    const res = await fetch(ANNOUNCEMENTS_URL, { cache: "no-store" });
+    const text = await res.text();
+
+    // parseCSV returns ALL rows including header
+    const all = parseCSV(text.trim());
+
+    console.log("📣 announcements ALL rows:", all);
+
+    // Find column indexes by header names (Active, text)
+    const header = all[0].map(h => String(h).trim().toLowerCase());
+    const activeIdx = header.indexOf("active");
+    const textIdx = header.indexOf("text");
+
+    if (activeIdx === -1 || textIdx === -1) {
+      throw new Error(`Header missing. Found: ${header.join(", ")}`);
+    }
+
+    const rows = all.slice(1);
+
+    list.innerHTML = "";
+    let added = 0;
+
+    rows.forEach((r) => {
+      const active = String(r[activeIdx] ?? "").trim().toUpperCase();
+      const msg = String(r[textIdx] ?? "").trim();
+
+      if (active === "TRUE" && msg) {
+        const li = document.createElement("li");
+        li.textContent = msg;
+        list.appendChild(li);
+        added++;
+      }
+    });
+
+    if (!added) {
+      list.innerHTML = "<li>No announcements</li>";
+    }
+
+    console.log("📣 announcements rendered:", added);
+  } catch (err) {
+    console.warn("📣 loadAnnouncements failed:", err);
+    list.innerHTML = "<li>Announcements unavailable</li>";
   }
 }
 
