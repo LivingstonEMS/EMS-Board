@@ -43,8 +43,8 @@
   const CHARS_PER_SECOND = 3.0;
 
   // Clamp duration so it’s never too fast / too slow
-  const MIN_SECONDS = 120;  // at least 2 minutes
-  const MAX_SECONDS = 300;  // at most 5 minutes (tweak if you want even slower)
+  const MIN_SECONDS = 180;  // at least 3 minutes
+  const MAX_SECONDS = 420;  // at most 7 minutes (tweak if you want even slower)
 
   // Cache so if feeds fail you still show something
   const CACHE_KEY = "ems_board_headlines_cache_v1";
