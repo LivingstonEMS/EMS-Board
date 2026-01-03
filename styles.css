@@ -30,20 +30,21 @@ html, body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 15px 10px;
+  padding: 18px 12px;
   z-index: 1000;
 }
 
-#logo-top,
-#logo-bottom {
-  max-width: 260px;
-  margin: 10px 0;
+/* Livingston EMS logo (larger) */
+#logo-top {
+  max-width: 300px;
+  margin: 12px 0 18px;
 }
 
+/* Clock */
 #clock {
-  font-size: 3.2em;
-  font-weight: bold;
-  margin: 15px 0;
+  font-size: 3.4em;
+  font-weight: 700;
+  margin: 10px 0 16px;
 }
 
 /* ===============================
@@ -52,16 +53,15 @@ html, body {
 #weather {
   width: 100%;
   text-align: center;
-  padding: 12px;
-  margin: 10px 0;
+  padding: 14px;
+  margin-bottom: 12px;
   background: #1a2230;
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
 .weather-title {
   font-size: 1.2em;
   font-weight: bold;
-  margin-bottom: 6px;
 }
 
 #weather-temp {
@@ -70,12 +70,12 @@ html, body {
 }
 
 #weather-desc {
-  font-size: 1.2em;
-  margin-top: 6px;
+  font-size: 1.1em;
+  margin-top: 4px;
 }
 
 #weather-extra {
-  font-size: 1em;
+  font-size: 0.95em;
   margin-top: 6px;
   opacity: 0.9;
 }
@@ -85,22 +85,17 @@ html, body {
 ================================ */
 #aviation {
   width: 100%;
-  padding: 12px;
-  margin-top: 12px;
+  padding: 14px;
   background: #1a2230;
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 0.95em;
+  margin-bottom: 16px;
 }
 
 .aviation-title {
   font-weight: bold;
   font-size: 1.1em;
-  margin-bottom: 6px;
   text-align: center;
-}
-
-#av-category {
-  font-weight: bold;
   margin-bottom: 6px;
 }
 
@@ -109,11 +104,13 @@ html, body {
 .av-ifr { color: #ff8c00; }
 .av-lifr { color: #ff4c4c; }
 
-#av-details,
-#av-raw {
-  font-size: 0.9em;
-  margin-top: 6px;
-  line-height: 1.3;
+/* ===============================
+   CODE 3 LOGO (ABOVE TICKER)
+================================ */
+#logo-bottom {
+  margin-top: auto;
+  margin-bottom: 80px; /* keeps it above ticker */
+  max-width: 180px;
 }
 
 /* ===============================
@@ -169,7 +166,7 @@ html, body {
   position: absolute;
   width: 100%;
   height: 100%;
-  padding: 20px;
+  padding: 22px;
   display: none;
 }
 
@@ -179,16 +176,9 @@ html, body {
 
 .slide h1 {
   font-size: 2.2em;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
-/* IFRAME MAPS */
-.slide iframe {
-  width: 100%;
-  height: calc(100% - 60px);
-  border: none;
-  border-radius: 10px;
-}
 /* ===============================
    SCHEDULE
 ================================ */
@@ -201,31 +191,28 @@ html, body {
 
 #schedule-table thead th {
   text-align: left;
-  font-weight: 700;
   padding: 10px 12px;
+  font-weight: 700;
   border-bottom: 2px solid #2c3444;
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255,255,255,0.05);
 }
 
 #schedule-table tbody td {
   padding: 10px 12px;
   border-bottom: 1px solid #2c3444;
-  color: #ffffff;
 }
 
-/* Row colors (apply to the TR, not TD) */
+/* North / South colors */
 #schedule-table tbody tr.row-north {
-  background: rgba(0, 120, 255, 0.18); /* Blue */
+  background: rgba(0,120,255,0.20);
 }
 
 #schedule-table tbody tr.row-south {
-  background: rgba(160, 160, 160, 0.18); /* Gray */
+  background: rgba(160,160,160,0.20);
 }
 
-/* nice hover */
 #schedule-table tbody tr:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255,255,255,0.08);
 }
 
 /* ===============================
@@ -238,49 +225,11 @@ html, body {
 }
 
 .announcements li {
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 /* ===============================
-   TORNADO OVERRIDE
-================================ */
-#tornado-override {
-  position: fixed;
-  inset: 0;
-  background: red;
-  color: white;
-  z-index: 5000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-#tornado-override.hidden {
-  display: none;
-}
-
-.tornado-inner {
-  text-align: center;
-  max-width: 800px;
-}
-
-.tornado-title {
-  font-size: 4em;
-  font-weight: bold;
-}
-
-.tornado-areas {
-  font-size: 2em;
-  margin: 20px 0;
-}
-
-.tornado-sub,
-.tornado-sub2 {
-  font-size: 1.5em;
-}
-
-/* ===============================
-   NEWS TICKER (FIXED)
+   NEWS TICKER (STABLE)
 ================================ */
 #global-ticker {
   position: fixed;
@@ -303,18 +252,4 @@ html, body {
   white-space: nowrap;
   font-size: 1.6em;
   will-change: transform;
-  transform: translateX(100vw);
-}
-/* Schedule row colors */
-#schedule-table .row-north td {
-  background: rgba(0, 120, 255, 0.18);
-}
-
-#schedule-table .row-south td {
-  background: rgba(160, 160, 160, 0.18);
-}
-
-/* optional: make text pop */
-#schedule-table td {
-  padding: 10px 12px;
 }

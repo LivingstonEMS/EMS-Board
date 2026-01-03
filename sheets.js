@@ -1,25 +1,27 @@
-console.log("✅ sheets.js loaded");
+// ===============================
+// sheets.js (FINAL LOCKED)
+// Livingston County EMS Board
+// ===============================
 
-/**
- * If you want to override URLs from index.html, you can set:
- * window.SCHEDULE_URL = "..."
- * window.ANNOUNCEMENTS_URL = "..."
- * window.STATUS_URL = "..."
- */
-const DEFAULT_SCHEDULE_URL =
+console.log("✅ sheets.js loaded (FINAL LOCKED)");
+
+// Paste your "Publish to web" CSV URLs here
+const ANNOUNCEMENTS_URL =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vSjU3xZI4zsPk0ECZHaFKWKZjdvTdVWk3X4VcYlNh9OV00SHwzuT0TsABo3xzdjJnwo5jci80SJgkhe/pub?output=csv";
+
+const SCHEDULE_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vQYXP1-d_DgHENUnWizMZeEN2jsz9y4z5lmfSmN9ktm0Bwseu52-j2_WYaXaurEVk56RDG9KK6ieQPp/pub?output=csv";
 
-const SCHEDULE_URL = window.SCHEDULE_URL || DEFAULT_SCHEDULE_URL;
-const ANNOUNCEMENTS_URL = window.ANNOUNCEMENTS_URL || "";
-const STATUS_URL = window.STATUS_URL || "";
+const STATUS_URL =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vRKMYW3E7RImjEQV253Vj7bPtQYUI2HrYUoyh9TeqkrfdaYGqKbGWe83voMA6VGRruLvo-zSPx1_FaH/pub?output=csv";
 
-/* ---------------- CSV helpers ---------------- */
-
+// -------------------------------
+// Robust CSV Parser (quoted commas)
+// -------------------------------
 function parseCSV(text) {
-  // Robust-ish CSV parser (handles quotes + commas inside quotes)
   const rows = [];
   let row = [];
-  let cur = "";
+  let cell = "";
   let inQuotes = false;
 
   for (let i = 0; i < text.length; i++) {
@@ -27,264 +29,131 @@ function parseCSV(text) {
     const next = text[i + 1];
 
     if (ch === '"' && inQuotes && next === '"') {
-      // escaped quote
-      cur += '"';
+      cell += '"';
       i++;
       continue;
     }
-
     if (ch === '"') {
       inQuotes = !inQuotes;
       continue;
     }
-
-    if (!inQuotes && (ch === "," || ch === "\t")) {
-      row.push(cur);
-      cur = "";
+    if (ch === "," && !inQuotes) {
+      row.push(cell.trim());
+      cell = "";
       continue;
     }
-
-    if (!inQuotes && (ch === "\n" || ch === "\r")) {
-      // handle CRLF
+    if ((ch === "\n" || ch === "\r") && !inQuotes) {
       if (ch === "\r" && next === "\n") i++;
-      row.push(cur);
-      cur = "";
-      // ignore totally empty lines
-      if (row.some((c) => String(c || "").trim() !== "")) rows.push(row);
+      row.push(cell.trim());
+      if (row.length > 1 || row[0]) rows.push(row);
       row = [];
+      cell = "";
       continue;
     }
-
-    cur += ch;
+    cell += ch;
   }
 
-  // last cell
-  row.push(cur);
-  if (row.some((c) => String(c || "").trim() !== "")) rows.push(row);
+  if (cell.length || row.length) {
+    row.push(cell.trim());
+    if (row.length > 1 || row[0]) rows.push(row);
+  }
 
-  // trim cells
-  return rows.map((r) => r.map((c) => String(c ?? "").trim()));
+  return rows;
 }
 
 async function loadCSV(url) {
-  if (!url) return [];
   const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(`CSV HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
   const text = await res.text();
-  return parseCSV(text);
+  const all = parseCSV(text.trim());
+  // Drop header row safely
+  return all.length ? all.slice(1) : [];
 }
 
-function ymdLocal(dateObj = new Date()) {
-  // "YYYY-MM-DD" in the user's local time
-  const y = dateObj.getFullYear();
-  const m = String(dateObj.getMonth() + 1).padStart(2, "0");
-  const d = String(dateObj.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+// -------------------------------
+// Helpers
+// -------------------------------
+function pad2(n) {
+  return String(n).padStart(2, "0");
 }
 
+function yyyyMmDd(d) {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+function prettyDate(d) {
+  return d.toLocaleDateString("en-US", { weekday: "long", month: "numeric", day: "numeric" });
+}
+
+function normArea(area) {
+  const a = (area || "").trim().toLowerCase();
+  if (a.startsWith("n")) return "North";
+  if (a.startsWith("s")) return "South";
+  return area ? area.trim() : "";
+}
+
+function fmtTime(t) {
+  if (!t) return "";
+  const s = String(t).trim();
+  // if it's already HH:MM
+  if (/^\d{1,2}:\d{2}$/.test(s)) {
+    const [h, m] = s.split(":");
+    return `${pad2(h)}:${pad2(m)}`;
+  }
+  return s;
+}
+
+// 🔥 Key fix: normalize dates coming from Sheets
 function cleanDateCell(v) {
-  // Accept: "2026-01-02" OR "2026-01-02 00:00:00" OR "1/2/2026" etc.
-  const s = String(v || "").trim();
-  if (!s) return "";
+  const raw = String(v || "").trim();
+  if (!raw) return "";
 
-  // If it already looks like YYYY-MM-DD
-  const m = s.match(/(\d{4})-(\d{2})-(\d{2})/);
-  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  // Already ISO
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
 
-  // Try Date parse fallback
-  const dt = new Date(s);
-  if (!isNaN(dt.getTime())) return ymdLocal(dt);
-
-  return s; // last resort
-}
-
-/* ---------------- Schedule ---------------- */
-
-function buildHeaderRow(table, cols) {
-  const thead = document.createElement("thead");
-  const tr = document.createElement("tr");
-  cols.forEach((c) => {
-    const th = document.createElement("th");
-    th.textContent = c;
-    tr.appendChild(th);
-  });
-  thead.appendChild(tr);
-  table.appendChild(thead);
-}
-
-function addRow(tbody, rowObj) {
-  const tr = document.createElement("tr");
-
-  const area = (rowObj.Area || "").toLowerCase();
-  if (area === "north") tr.classList.add("row-north");
-  if (area === "south") tr.classList.add("row-south");
-
-  const cols = ["Day", "Area", "Name", "Level", "Shift", "Code"];
-  cols.forEach((key) => {
-    const td = document.createElement("td");
-    td.textContent = rowObj[key] || "";
-    tr.appendChild(td);
-  });
-
-  tbody.appendChild(tr);
-}
-
-
-async function loadSchedule() {
-  const table = document.getElementById("schedule-table");
-  if (!table) return;
-
-  // wipe
-  table.innerHTML = "";
-
-  if (!SCHEDULE_URL) {
-    table.textContent = "Schedule URL not set";
-    return;
+  // Common US formats: M/D/YYYY or M/D/YY
+  const mdY = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (mdY) {
+    let m = Number(mdY[1]);
+    let d = Number(mdY[2]);
+    let y = Number(mdY[3]);
+    if (y < 100) y = 2000 + y;
+    if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+      return `${y}-${pad2(m)}-${pad2(d)}`;
+    }
   }
 
-  try {
-    const rows = await loadCSV(SCHEDULE_URL);
+  // Try Date.parse fallback
+  const parsed = new Date(raw);
+  if (!isNaN(parsed.getTime())) return yyyyMmDd(parsed);
 
-    console.log("📅 schedule rows sample:", rows.slice(0, 5));
-
-    if (!rows.length) {
-      table.textContent = "No schedule rows found";
-      return;
-    }
-
-    // Detect header row
-    const header = rows[0].map((h) => h.toLowerCase());
-    const hasHeader =
-      header.includes("date") &&
-      header.includes("day") &&
-      header.includes("area");
-
-    const dataRows = hasHeader ? rows.slice(1) : rows;
-
-    // Map columns
-    const idx = (name) => header.indexOf(name.toLowerCase());
-
-    const colMap = hasHeader
-      ? {
-          Date: idx("date"),
-          Day: idx("day"),
-          Area: idx("area"),
-          Name: idx("name"),
-          Level: idx("level"),
-          ShiftStart: idx("shift start"),
-          ShiftEnd: idx("shift end"),
-          Code: idx("code"),
-        }
-      : {
-          // Fallback to the layout you showed
-          Date: 0,
-          Day: 1,
-          Area: 2,
-          Name: 3,
-          Level: 4,
-          ShiftStart: 5,
-          ShiftEnd: 6,
-          Code: 7,
-        };
-
-    const todayKey = ymdLocal(new Date());
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowKey = ymdLocal(tomorrow);
-
-    const items = [];
-
-    for (const r of dataRows) {
-      const dateRaw = r[colMap.Date] ?? "";
-      const dateKey = cleanDateCell(dateRaw);
-
-      if (dateKey !== todayKey && dateKey !== tomorrowKey) continue;
-
-      const day = r[colMap.Day] ?? "";
-      const area = r[colMap.Area] ?? "";
-      const name = r[colMap.Name] ?? "";
-      const level = r[colMap.Level] ?? "";
-      const start = r[colMap.ShiftStart] ?? "";
-      const end = r[colMap.ShiftEnd] ?? "";
-      const code = r[colMap.Code] ?? "";
-
-      const shift = start && end ? `${start}–${end}` : (start || end || "");
-
-      items.push({
-        DateKey: dateKey,
-        Day: day,
-        Area: area,
-        Name: name,
-        Level: level,
-        Shift: shift,
-        Code: code,
-      });
-    }
-
-    console.log("✅ matches for today/tomorrow:", {
-      todayKey,
-      tomorrowKey,
-      count: items.length,
-    });
-
-    // Build table
-    buildHeaderRow(table, ["Day", "Area", "Name", "Level", "Shift", "Code"]);
-    const tbody = document.createElement("tbody");
-    table.appendChild(tbody);
-
-    if (!items.length) {
-      const tr = document.createElement("tr");
-      const td = document.createElement("td");
-      td.colSpan = 6;
-      td.textContent = "No schedule posted for Today/Tomorrow";
-      td.style.padding = "12px 8px";
-      tr.appendChild(td);
-      tbody.appendChild(tr);
-      return;
-    }
-
-    // Sort by date, then area, then name
-    items.sort((a, b) => {
-      if (a.DateKey !== b.DateKey) return a.DateKey.localeCompare(b.DateKey);
-      if (a.Area !== b.Area) return a.Area.localeCompare(b.Area);
-      return a.Name.localeCompare(b.Name);
-    });
-
-    items.forEach((it) => addRow(tbody, it));
-  } catch (e) {
-    console.warn("📅 Schedule load failed:", e);
-    table.textContent = "Schedule unavailable (check CSV publish/link)";
-  }
+  // Give up (return raw so debug can show it)
+  return raw;
 }
 
-/* ---------------- Announcements (optional) ---------------- */
+function looksActive(v) {
+  const a = String(v || "").trim().toUpperCase();
+  return a === "TRUE" || a === "YES" || a === "1" || a === "Y" || a === "ON";
+}
 
+// -------------------------------
+// Announcements
+// -------------------------------
 async function loadAnnouncements() {
-  const list = document.getElementById("announcements-list");
-  if (!list) return;
-
-  list.innerHTML = "";
-
-  if (!ANNOUNCEMENTS_URL) {
-    const li = document.createElement("li");
-    li.textContent = "No announcements";
-    list.appendChild(li);
-    return;
-  }
-
   try {
     const rows = await loadCSV(ANNOUNCEMENTS_URL);
     console.log("📣 announcements rows sample:", rows.slice(0, 5));
 
-    const looksActive = (v) => {
-      const a = String(v || "").trim().toUpperCase();
-      return a === "TRUE" || a === "YES" || a === "1" || a === "Y" || a === "ON";
-    };
+    const list = document.getElementById("announcements-list");
+    if (!list) return;
+
+    list.innerHTML = "";
 
     rows.forEach((r) => {
       const c0 = (r[0] || "").trim();
       const c1 = (r[1] || "").trim();
 
+      // allow [Text, Active] or [Active, Text]
       let text = "";
       let activeVal = "";
 
@@ -309,38 +178,165 @@ async function loadAnnouncements() {
       list.appendChild(li);
     }
   } catch (e) {
-    console.warn("📣 Announcements load failed:", e);
-    const li = document.createElement("li");
-    li.textContent = "Announcements unavailable";
-    list.appendChild(li);
+    console.warn("📣 announcements failed:", e);
   }
 }
 
-/* ---------------- Status (optional) ---------------- */
-
+// -------------------------------
+// Status Banner
+// -------------------------------
 async function loadStatus() {
-  const el = document.getElementById("status-text");
-  if (!el) return;
-  if (!STATUS_URL) return;
-
   try {
     const rows = await loadCSV(STATUS_URL);
-    console.log("🧾 status rows sample:", rows.slice(0, 3));
-    // Expect: [STATUS, message] or [message, STATUS]
-    const r0 = rows[0] || [];
-    el.textContent = r0.join(" ").trim() || el.textContent;
+    console.log("🧾 status rows sample:", rows.slice(0, 5));
+
+    // Accept either:
+    // [Message] OR [Label, Message]
+    const first = rows?.[0] || [];
+    const message = first.length >= 2 ? first[1] : (first[0] || "Normal Operations");
+
+    const el = document.getElementById("status-banner");
+    if (el) el.textContent = message || "Normal Operations";
   } catch (e) {
-    console.warn("🧾 Status load failed:", e);
+    console.warn("🧾 status failed:", e);
   }
 }
 
-/* ---------------- boot ---------------- */
+// -------------------------------
+// Schedule (Today + Tomorrow)
+// -------------------------------
+async function loadSchedule() {
+  try {
+    const rows = await loadCSV(SCHEDULE_URL);
+    console.log("📅 schedule rows sample:", rows.slice(0, 5));
 
-document.addEventListener("DOMContentLoaded", () => {
-  loadSchedule();
-  loadAnnouncements();
-  loadStatus();
+    const table = document.getElementById("schedule-table");
+    if (!table) return;
 
-  // refresh schedule every 5 min (optional)
-  setInterval(loadSchedule, 5 * 60 * 1000);
-});
+    table.innerHTML = "";
+
+    const today = new Date();
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const todayKey = yyyyMmDd(today);
+    const tomorrowKey = yyyyMmDd(tomorrow);
+
+    // Build entries
+    const entries = rows
+      .map((r) => {
+        const dateRaw = r[0] || "";
+        const date = cleanDateCell(dateRaw);
+
+        return {
+          date,
+          day: (r[1] || "").trim(),
+          area: normArea(r[2]),
+          name: (r[3] || "").trim(),
+          level: (r[4] || "").trim(),
+          start: fmtTime(r[5]),
+          end: fmtTime(r[6]),
+          code: (r[7] || "").trim(),
+          _dateRaw: dateRaw
+        };
+      });
+
+    console.log(
+      "📅 schedule date cells (raw → cleaned):",
+      entries.slice(0, 10).map((e) => [e._dateRaw, e.date])
+    );
+
+    const filtered = entries.filter((e) => e.date === todayKey || e.date === tomorrowKey);
+
+    console.log("✅ matches for today/tomorrow:", {
+      todayKey,
+      tomorrowKey,
+      count: filtered.length
+    });
+
+    // Table header
+    const thead = document.createElement("thead");
+    const hr = document.createElement("tr");
+    ["Date", "Area", "Name", "Level", "Start", "End"].forEach((h) => {
+      const th = document.createElement("th");
+      th.textContent = h;
+      hr.appendChild(th);
+    });
+    thead.appendChild(hr);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+
+    if (!filtered.length) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 6;
+      td.textContent = "No schedule found for Today/Tomorrow";
+      td.style.padding = "14px";
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+      table.appendChild(tbody);
+      return;
+    }
+
+    // Sort: date then area
+    filtered.sort((a, b) => {
+      if (a.date !== b.date) return a.date.localeCompare(b.date);
+      return a.area.localeCompare(b.area);
+    });
+
+    // Add a date divider row
+    let lastDate = "";
+    filtered.forEach((e) => {
+      if (e.date !== lastDate) {
+        lastDate = e.date;
+        const divider = document.createElement("tr");
+        divider.className = "row-divider";
+        const td = document.createElement("td");
+        td.colSpan = 6;
+        const d = new Date(e.date + "T00:00:00");
+        td.textContent = `${prettyDate(d)} (${e.date})`;
+        td.style.fontWeight = "800";
+        td.style.padding = "12px";
+        td.style.background = "rgba(255,255,255,0.06)";
+        divider.appendChild(td);
+        tbody.appendChild(divider);
+      }
+
+      const tr = document.createElement("tr");
+
+      // North blue / South gray (matches your CSS)
+      if (e.area.toLowerCase().startsWith("north")) tr.classList.add("row-north");
+      if (e.area.toLowerCase().startsWith("south")) tr.classList.add("row-south");
+
+      const cells = [
+        e.date,
+        e.area,
+        e.name,
+        e.level,
+        e.start,
+        e.end
+      ];
+
+      cells.forEach((c) => {
+        const td = document.createElement("td");
+        td.textContent = c || "";
+        tr.appendChild(td);
+      });
+
+      tbody.appendChild(tr);
+    });
+
+    table.appendChild(tbody);
+  } catch (e) {
+    console.warn("📅 schedule failed:", e);
+  }
+}
+
+// -------------------------------
+// Boot + Refresh
+// -------------------------------
+async function loadAllSheets() {
+  await Promise.allSettled([loadAnnouncements(), loadStatus(), loadSchedule()]);
+}
+
+loadAllSheets();
+setInterval(loadAllSheets, 2 * 60 * 1000); // refresh every 2 min
