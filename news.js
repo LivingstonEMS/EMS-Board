@@ -1,21 +1,19 @@
 console.log("✅ news.js loaded");
 
-// Mix of EMS + Local sources (RSS)
+// RSS feeds
 const FEEDS = [
   "https://www.ems1.com/rss/",
   "https://www.jems.com/feed/",
-  "https://www.wpsdlocal6.com/search/?f=rss&t=article&c=news",
   "https://rss.nytimes.com/services/xml/rss/nyt/US.xml"
 ];
 
-// Proxy to avoid CORS (NOTE: sometimes gets blocked)
+// Proxy (can fail sometimes)
 const PROXY = "https://api.allorigins.win/raw?url=";
 
-// How many headlines total to show
+// Settings
 const MAX_HEADLINES = 25;
-
-// Speed in pixels per second (higher = faster)
-const TICKER_PX_PER_SEC = 140; // try 120-180
+const TICKER_SECONDS = 35; // slower = more readable
+let lastTickerText = "";
 
 function stripHtml(s) {
   return (s || "")
@@ -27,10 +25,8 @@ function stripHtml(s) {
 
 function parseRssTitles(xmlText) {
   const doc = new DOMParser().parseFromString(xmlText, "text/xml");
-  const items = Array.from(doc.querySelectorAll("item"));
-
-  return items
-    .map((it) => stripHtml(it.querySelector("title")?.textContent || ""))
+  return Array.from(doc.querySelectorAll("item"))
+    .map(it => stripHtml(it.querySelector("title")?.textContent || ""))
     .filter(Boolean);
 }
 
@@ -41,39 +37,31 @@ async function fetchFeed(url) {
   return parseRssTitles(text);
 }
 
-// ---- THE FIX: pixel-based scrolling that never cuts off ----
-function startTickerScroll(text) {
+function startTicker(text) {
   const el = document.getElementById("news-content");
   const wrap = document.getElementById("global-ticker");
   if (!el || !wrap) return;
 
-  // If the text didn't change, don't restart (prevents mid-run snapping)
-  if (el.dataset.currentText === text) return;
-  el.dataset.currentText = text;
+  // If text didn't change, DO NOT restart animation
+  if (text === lastTickerText) return;
+  lastTickerText = text;
 
+  el.classList.remove("ticking");
   el.textContent = text || "No headlines available";
 
+  // Wait one frame so layout is updated
   requestAnimationFrame(() => {
     const wrapW = wrap.clientWidth;
     const textW = el.scrollWidth;
 
-    const distance = wrapW + textW; // full travel
-    const durationSec = distance / TICKER_PX_PER_SEC;
+    // End point: move all the way off screen to the left
+    const end = -(textW + 50);
+    el.style.setProperty("--ticker-end", `${end}px`);
+    el.style.animationDuration = `${TICKER_SECONDS}s`;
 
-    // Kill any existing animation
-    if (el._anim) el._anim.cancel();
-
-    el._anim = el.animate(
-      [
-        { transform: `translateX(${wrapW}px)` },
-        { transform: `translateX(${-textW}px)` }
-      ],
-      {
-        duration: durationSec * 1000,
-        iterations: Infinity,
-        easing: "linear"
-      }
-    );
+    // restart clean
+    void el.offsetHeight;
+    el.classList.add("ticking");
   });
 }
 
@@ -81,19 +69,19 @@ async function loadHeadlines() {
   try {
     const results = await Promise.allSettled(FEEDS.map(fetchFeed));
     const titles = results
-      .filter((r) => r.status === "fulfilled")
-      .flatMap((r) => r.value);
+      .filter(r => r.status === "fulfilled")
+      .flatMap(r => r.value);
 
     const unique = Array.from(new Set(titles)).slice(0, MAX_HEADLINES);
     if (!unique.length) throw new Error("No headlines parsed");
 
     const line = unique.join("  |  ");
-    startTickerScroll(line);
+    startTicker(line);
 
     console.log(`📰 Loaded ${unique.length} headlines`);
   } catch (e) {
     console.warn("📰 Headlines failed:", e);
-    startTickerScroll("Headlines unavailable • Check internet / feed sources");
+    startTicker("Headlines unavailable • (RSS / proxy blocked)");
   }
 }
 
