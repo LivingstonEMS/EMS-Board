@@ -195,54 +195,76 @@ async function loadSchedule() {
     table.innerHTML = "";
 
     const today = new Date();
-    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const tomorrow = new Date(Date.now() + 86400000);
     const todayKey = yyyyMmDd(today);
     const tomorrowKey = yyyyMmDd(tomorrow);
 
-    const entries = rows.map((r) => ({
-      date: cleanDateCell(r[0]),
-      day: (r[1] || "").trim(),
-      area: normArea(r[2]),
-      name: (r[3] || "").trim(),
-      level: (r[4] || "").trim(),
-      start: fmtTime(r[5]),
-      end: fmtTime(r[6]),
-      code: (r[7] || "").trim()
-    }));
+    const entries = rows.map((r) => {
+      // 🔥 FIX: rebuild columns if name contains commas
+      let cells = [...r];
 
-    console.log(
-      "📅 schedule date cells (raw → cleaned):",
-      rows.slice(0, 10).map(r => [r[0], cleanDateCell(r[0])])
+      // Ensure we end with exactly 8 columns
+      // Date, Day, Area, Name, Level, Start, End, Code
+      if (cells.length > 8) {
+        const date = cells[0];
+        const day = cells[1];
+        const area = cells[2];
+
+        // Level is always ALS or BLS → find it
+        const levelIndex = cells.findIndex(c =>
+          c === "ALS" || c === "BLS"
+        );
+
+        const name = cells.slice(3, levelIndex).join(", ").trim();
+        const level = cells[levelIndex];
+        const start = cells[levelIndex + 1];
+        const end = cells[levelIndex + 2];
+        const code = cells[levelIndex + 3] || "";
+
+        cells = [date, day, area, name, level, start, end, code];
+      }
+
+      return {
+        date: cleanDateCell(cells[0]),
+        day: (cells[1] || "").trim(),
+        area: normArea(cells[2]),
+        name: (cells[3] || "").trim(),
+        level: (cells[4] || "").trim(),
+        start: fmtTime(cells[5]),
+        end: fmtTime(cells[6]),
+        code: (cells[7] || "").trim()
+      };
+    });
+
+    const matches = entries.filter(e =>
+      e.date === todayKey || e.date === tomorrowKey
     );
 
-    const matches = entries.filter(e => e.date === todayKey || e.date === tomorrowKey);
-    console.log("✅ matches for today/tomorrow:", { todayKey, tomorrowKey, count: matches.length });
+    console.log("✅ matches for today/tomorrow:", {
+      todayKey,
+      tomorrowKey,
+      count: matches.length
+    });
 
     // Header
     const header = document.createElement("tr");
     header.innerHTML = `
-      <th>Date</th><th>Day</th><th>Area</th><th>Name</th>
-      <th>Level</th><th>Start</th><th>End</th>
+      <th>Date</th><th>Day</th><th>Area</th>
+      <th>Name</th><th>Level</th><th>Start</th><th>End</th>
     `;
     table.appendChild(header);
 
     if (!matches.length) {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `<td colspan="7">No schedule found for today/tomorrow.</td>`;
-      table.appendChild(tr);
+      table.innerHTML += `<tr><td colspan="7">No schedule found.</td></tr>`;
       return;
     }
 
-    // sort by date then area then start
-    matches.sort((a,b) =>
-      a.date.localeCompare(b.date) ||
-      a.area.localeCompare(b.area) ||
-      a.start.localeCompare(b.start)
-    );
-
-    matches.forEach((e) => {
+    matches.forEach(e => {
       const tr = document.createElement("tr");
-      tr.className = e.area === "North" ? "row-north" : (e.area === "South" ? "row-south" : "");
+      tr.className =
+        e.area === "North" ? "row-north" :
+        e.area === "South" ? "row-south" : "";
+
       tr.innerHTML = `
         <td>${e.date}</td>
         <td>${e.day}</td>
@@ -254,8 +276,9 @@ async function loadSchedule() {
       `;
       table.appendChild(tr);
     });
+
   } catch (e) {
-    console.warn("📅 Schedule failed:", e);
+    console.error("📅 Schedule load failed:", e);
   }
 }
 
