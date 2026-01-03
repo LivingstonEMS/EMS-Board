@@ -189,19 +189,43 @@ html, body {
   border: none;
   border-radius: 10px;
 }
-
 /* ===============================
    SCHEDULE
 ================================ */
 #schedule-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 1.4em;
+  font-size: 1.25em;
+  table-layout: fixed;
 }
 
-#schedule-table td {
+#schedule-table thead th {
+  text-align: left;
+  font-weight: 700;
+  padding: 10px 12px;
+  border-bottom: 2px solid #2c3444;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+#schedule-table tbody td {
+  padding: 10px 12px;
   border-bottom: 1px solid #2c3444;
-  padding: 10px;
+  color: #ffffff;
+}
+
+/* Row colors (apply to the TR, not TD) */
+#schedule-table tbody tr.row-north {
+  background: rgba(0, 120, 255, 0.18); /* Blue */
+}
+
+#schedule-table tbody tr.row-south {
+  background: rgba(160, 160, 160, 0.18); /* Gray */
+}
+
+/* nice hover */
+#schedule-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.06);
 }
 
 /* ===============================

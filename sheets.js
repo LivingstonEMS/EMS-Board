@@ -115,10 +115,9 @@ function buildHeaderRow(table, cols) {
 function addRow(tbody, rowObj) {
   const tr = document.createElement("tr");
 
-  // Color rules: North = blue, South = gray
   const area = (rowObj.Area || "").toLowerCase();
-  if (area === "north") tr.style.background = "rgba(0, 120, 255, 0.18)";
-  if (area === "south") tr.style.background = "rgba(150, 150, 150, 0.16)";
+  if (area === "north") tr.classList.add("row-north");
+  if (area === "south") tr.classList.add("row-south");
 
   const cols = ["Day", "Area", "Name", "Level", "Shift", "Code"];
   cols.forEach((key) => {
@@ -129,6 +128,7 @@ function addRow(tbody, rowObj) {
 
   tbody.appendChild(tr);
 }
+
 
 async function loadSchedule() {
   const table = document.getElementById("schedule-table");
