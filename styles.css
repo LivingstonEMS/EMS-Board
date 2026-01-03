@@ -281,3 +281,16 @@ html, body {
   will-change: transform;
   transform: translateX(100vw);
 }
+/* Schedule row colors */
+#schedule-table .row-north td {
+  background: rgba(0, 120, 255, 0.18);
+}
+
+#schedule-table .row-south td {
+  background: rgba(160, 160, 160, 0.18);
+}
+
+/* optional: make text pop */
+#schedule-table td {
+  padding: 10px 12px;
+}
