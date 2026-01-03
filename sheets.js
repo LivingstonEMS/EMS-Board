@@ -194,25 +194,20 @@ async function loadSchedule() {
     if (!table) return;
     table.innerHTML = "";
 
-    const today = new Date();
-    const tomorrow = new Date(Date.now() + 86400000);
-    const todayKey = yyyyMmDd(today);
-    const tomorrowKey = yyyyMmDd(tomorrow);
+    const todayKey = yyyyMmDd(new Date());
+    const tomorrowKey = yyyyMmDd(new Date(Date.now() + 86400000));
 
     const entries = rows.map((r) => {
-      // 🔥 FIX: rebuild columns if name contains commas
       let cells = [...r];
 
-      // Ensure we end with exactly 8 columns
-      // Date, Day, Area, Name, Level, Start, End, Code
+      // 🔒 CSV FIX: repair rows where name contains commas
       if (cells.length > 8) {
         const date = cells[0];
         const day = cells[1];
         const area = cells[2];
 
-        // Level is always ALS or BLS → find it
-        const levelIndex = cells.findIndex(c =>
-          c === "ALS" || c === "BLS"
+        const levelIndex = cells.findIndex(
+          c => c === "ALS" || c === "BLS"
         );
 
         const name = cells.slice(3, levelIndex).join(", ").trim();
@@ -246,16 +241,23 @@ async function loadSchedule() {
       count: matches.length
     });
 
-    // Header
+    // Header row
     const header = document.createElement("tr");
     header.innerHTML = `
-      <th>Date</th><th>Day</th><th>Area</th>
-      <th>Name</th><th>Level</th><th>Start</th><th>End</th>
+      <th>Date</th>
+      <th>Day</th>
+      <th>Area</th>
+      <th>Name</th>
+      <th>Level</th>
+      <th>Start</th>
+      <th>End</th>
     `;
     table.appendChild(header);
 
     if (!matches.length) {
-      table.innerHTML += `<tr><td colspan="7">No schedule found.</td></tr>`;
+      table.innerHTML += `
+        <tr><td colspan="7">No schedule posted.</td></tr>
+      `;
       return;
     }
 
@@ -277,8 +279,8 @@ async function loadSchedule() {
       table.appendChild(tr);
     });
 
-  } catch (e) {
-    console.error("📅 Schedule load failed:", e);
+  } catch (err) {
+    console.error("📅 Schedule load failed:", err);
   }
 }
 
