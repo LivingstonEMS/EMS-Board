@@ -1,20 +1,22 @@
 console.log("✅ sheets.js loaded");
 
-// ===============================
-// Published CSV URLs
-// ===============================
+/* ===============================
+   Google Sheets Admin Integration
+   =============================== */
+
+// Published CSV URLs (yours)
 const ANNOUNCEMENTS_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vSjU3xZI4zsPk0ECZHaFKWKZjdvTdVWk3X4VcYlNh9OV00SHwzuT0TsABo3xzdjJnwo5jci80SJgkhe/pub?output=csv";
 
 const SCHEDULE_URL =
-  "https://docs.google.com/spreadsheets/d/e/2PACX-1vStmTvJPfr46sHRtY3h8aLp40EN_4jD_lX813MEp7aSuKcWYkroNRi-evzAnZCvN8uiUGgWGGiaP50d/pub?output=csv";
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vQYXP1-d_DgHENUnWizMZeEN2jsz9y4z5lmfSmN9ktm0Bwseu52-j2_WYaXaurEVk56RDG9KK6ieQPp/pub?output=csv";
 
 const STATUS_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vRKMYW3E7RImjEQV253Vj7bPtQYUI2HrYUoyh9TeqkrfdaYGqKbGWe83voMA6VGRruLvo-zSPx1_FaH/pub?output=csv";
 
-// ===============================
-// CSV Parser (robust)
-// ===============================
+/* -------------------------------
+   CSV Parser (handles quoted commas)
+--------------------------------- */
 function parseCSV(text) {
   const rows = [];
   let row = [];
@@ -30,106 +32,91 @@ function parseCSV(text) {
       i++;
       continue;
     }
+
     if (ch === '"') {
       inQuotes = !inQuotes;
       continue;
     }
+
     if (ch === "," && !inQuotes) {
       row.push(cell.trim());
       cell = "";
       continue;
     }
+
     if ((ch === "\n" || ch === "\r") && !inQuotes) {
       if (ch === "\r" && next === "\n") i++;
       row.push(cell.trim());
-      if (row.length > 1) rows.push(row);
-      row = [];
       cell = "";
+
+      if (row.length > 1 || (row[0] || "").trim() !== "") rows.push(row);
+      row = [];
       continue;
     }
+
     cell += ch;
   }
 
-  if (cell || row.length) {
+  if (cell.length || row.length) {
     row.push(cell.trim());
-    if (row.length > 1) rows.push(row);
+    if (row.length > 1 || (row[0] || "").trim() !== "") rows.push(row);
   }
 
   return rows;
 }
 
+// Some rows may come in as a single cell separated by tabs (rare copy/paste weirdness)
+function normalizeRow(r) {
+  if (!r) return [];
+  if (r.length === 1 && String(r[0]).includes("\t")) {
+    return String(r[0]).split("\t").map((x) => x.trim());
+  }
+  return r.map((x) => String(x ?? "").trim());
+}
+
 async function loadCSV(url) {
   const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(`CSV HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`CSV HTTP ${res.status} for ${url}`);
   const text = await res.text();
-  const rows = parseCSV(text);
-  // drop header row if present
-  return rows.slice(1);
+
+  const all = parseCSV(text.trim()).map(normalizeRow);
+
+  // Drop header row if present
+  return all.slice(1);
 }
 
-// ===============================
-// Helpers
-// ===============================
-function pad2(n) {
-  return String(n).padStart(2, "0");
+/* -------------------------------
+   Helpers
+--------------------------------- */
+
+// ✅ LOCAL date key (fixes your Today/Tomorrow bug)
+function yyyyMmDdLocal(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
-function dateKeyLocal(d) {
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+function addDaysLocal(d, days) {
+  const x = new Date(d);
+  x.setDate(x.getDate() + days);
+  return x;
 }
 
-function todayKey(offsetDays = 0) {
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDays);
-  return dateKeyLocal(d);
-}
-
-// Converts:
-// - "2026-01-02" -> "2026-01-02"
-// - "1/2/2026"   -> "2026-01-02"
-// - "01/02/2026" -> "2026-01-02"
-// - "45678" (Google serial date) -> yyyy-mm-dd
-function normalizeDateToKey(v) {
-  if (v == null) return "";
-  const s = String(v).trim();
-  if (!s) return "";
-
-  // YYYY-MM-DD
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-
-  // M/D/YYYY or MM/DD/YYYY
-  const mdy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (mdy) {
-    const mm = pad2(mdy[1]);
-    const dd = pad2(mdy[2]);
-    const yy = mdy[3];
-    return `${yy}-${mm}-${dd}`;
-  }
-
-  // Google Sheets serial date (days since 1899-12-30)
-  if (/^\d+(\.\d+)?$/.test(s)) {
-    const serial = Number(s);
-    if (!Number.isNaN(serial) && serial > 20000 && serial < 90000) {
-      const base = new Date(Date.UTC(1899, 11, 30));
-      const d = new Date(base.getTime() + serial * 86400000);
-      // convert to LOCAL date key (so it matches your todayKey)
-      return dateKeyLocal(new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-    }
-  }
-
-  // fallback: try Date parsing
-  const parsed = new Date(s);
-  if (!Number.isNaN(parsed.getTime())) return dateKeyLocal(parsed);
-
-  return s;
+function normArea(area) {
+  const a = (area || "").trim().toLowerCase();
+  if (a.startsWith("n")) return "North";
+  if (a.startsWith("s")) return "South";
+  return (area || "").trim();
 }
 
 function fmtTime(t) {
   if (!t) return "";
-  const str = String(t).trim();
-  if (!str.includes(":")) return str;
-  const [h, m] = str.split(":");
-  return `${pad2(h)}:${pad2(m)}`;
+  const parts = String(t).trim().split(":");
+  if (parts.length < 2) return String(t).trim();
+  const hh = String(parts[0]).padStart(2, "0");
+  const mm = String(parts[1]).padStart(2, "0");
+  return `${hh}:${mm}`;
 }
 
 function looksActive(v) {
@@ -137,16 +124,7 @@ function looksActive(v) {
   return a === "TRUE" || a === "YES" || a === "1" || a === "Y" || a === "ON";
 }
 
-function normArea(area) {
-  const a = String(area || "").trim().toLowerCase();
-  if (a.startsWith("n")) return "North";
-  if (a.startsWith("s")) return "South";
-  return String(area || "").trim();
-}
-
-// ===============================
-// Announcements
-// ===============================
+/* ---------------- Announcements ---------------- */
 async function loadAnnouncements() {
   try {
     const rows = await loadCSV(ANNOUNCEMENTS_URL);
@@ -161,23 +139,19 @@ async function loadAnnouncements() {
       const c0 = (r[0] || "").trim();
       const c1 = (r[1] || "").trim();
 
-      // Detect which column is Active vs Text
       let text = "";
-      let active = "";
+      let activeVal = "";
 
+      // Handles both: [Text, Active] or [Active, Text]
       if (looksActive(c0) && c1) {
-        active = c0;
+        activeVal = c0;
         text = c1;
-      } else if (looksActive(c1) && c0) {
-        active = c1;
-        text = c0;
       } else {
-        // If no active column exists, treat first column as text
         text = c0;
-        active = "TRUE";
+        activeVal = c1;
       }
 
-      if (looksActive(active) && text) {
+      if (looksActive(activeVal) && text) {
         const li = document.createElement("li");
         li.textContent = text;
         list.appendChild(li);
@@ -185,39 +159,42 @@ async function loadAnnouncements() {
     });
 
     if (!list.children.length) {
-      list.innerHTML = "<li>No announcements</li>";
+      const li = document.createElement("li");
+      li.textContent = "No announcements";
+      list.appendChild(li);
     }
   } catch (e) {
-    console.warn("❌ loadAnnouncements failed:", e);
-    const list = document.getElementById("announcements-list");
-    if (list) list.innerHTML = "<li>Announcements unavailable</li>";
+    console.warn("📣 announcements failed:", e);
   }
 }
 
-// ===============================
-// Status Banner
-// ===============================
+/* ---------------- Status banner ---------------- */
 async function loadStatus() {
   try {
     const rows = await loadCSV(STATUS_URL);
-    console.log("🧾 status rows sample:", rows.slice(0, 3));
+    console.log("🧾 status rows sample:", rows.slice(0, 5));
 
     const banner = document.getElementById("status-banner");
     if (!banner) return;
 
-    const message = rows?.[0]?.[1] || rows?.[0]?.[0] || "Normal Operations";
+    // Expect either:
+    // [Status, Message]  e.g. NORMAL,Normal Operations
+    // or just [Message]
+    const r0 = rows[0] || [];
+    const status = (r0[0] || "").trim();
+    const message = (r0[1] || r0[0] || "Normal Operations").trim();
+
+    // Show message only (keeps it clean)
     banner.textContent = message;
+
+    // Optional: add class for styling like status-normal/status-alert
+    banner.dataset.status = status.toLowerCase();
   } catch (e) {
-    console.warn("❌ loadStatus failed:", e);
-    const banner = document.getElementById("status-banner");
-    if (banner) banner.textContent = "Status unavailable";
+    console.warn("🧾 status failed:", e);
   }
 }
 
-// ===============================
-// Schedule (Today + Tomorrow)
-// + North blue / South gray
-// ===============================
+/* ---------------- Schedule (Today + Tomorrow) ---------------- */
 async function loadSchedule() {
   try {
     const rows = await loadCSV(SCHEDULE_URL);
@@ -228,25 +205,30 @@ async function loadSchedule() {
 
     table.innerHTML = "";
 
-    const today = todayKey(0);
-    const tomorrow = todayKey(1);
+    const now = new Date();
+    const todayKey = yyyyMmDdLocal(now);
+    const tomorrowKey = yyyyMmDdLocal(addDaysLocal(now, 1));
 
     const entries = rows
       .map((r) => ({
-        dateKey: normalizeDateToKey(r[0]),
+        date: (r[0] || "").trim(),
         day: (r[1] || "").trim(),
         area: normArea(r[2]),
         name: (r[3] || "").trim(),
         level: (r[4] || "").trim(),
         start: fmtTime(r[5]),
         end: fmtTime(r[6]),
-        code: (r[7] || "").trim(),
+        code: (r[7] || "").trim()
       }))
-      .filter((e) => e.dateKey === today || e.dateKey === tomorrow);
+      .filter((e) => e.date === todayKey || e.date === tomorrowKey);
 
-    console.log("✅ matches for today/tomorrow:", { today, tomorrow, count: entries.length });
+    console.log("✅ matches for today/tomorrow:", {
+      todayKey,
+      tomorrowKey,
+      count: entries.length
+    });
 
-    // Header row
+    // Header row (optional – remove if you already have a <thead> in HTML)
     const header = document.createElement("tr");
     header.innerHTML = `
       <th>Day</th>
@@ -265,38 +247,42 @@ async function loadSchedule() {
       return;
     }
 
+    // Sort by date then area then start
+    entries.sort((a, b) => {
+      if (a.date !== b.date) return a.date.localeCompare(b.date);
+      if (a.area !== b.area) return a.area.localeCompare(b.area);
+      return (a.start || "").localeCompare(b.start || "");
+    });
+
     entries.forEach((e) => {
       const tr = document.createElement("tr");
+
+      // ✅ add classes so CSS can color them
       if (e.area === "North") tr.classList.add("row-north");
       if (e.area === "South") tr.classList.add("row-south");
 
+      const shift = e.start && e.end ? `${e.start}–${e.end}` : "";
+
       tr.innerHTML = `
-        <td>${e.day}</td>
-        <td>${e.area}</td>
-        <td>${e.name}</td>
-        <td>${e.level}</td>
-        <td>${e.start}${e.end ? "–" + e.end : ""}</td>
-        <td>${e.code}</td>
+        <td>${e.day || ""}</td>
+        <td>${e.area || ""}</td>
+        <td>${e.name || ""}</td>
+        <td>${e.level || ""}</td>
+        <td>${shift}</td>
+        <td>${e.code || ""}</td>
       `;
+
       table.appendChild(tr);
     });
   } catch (e) {
-    console.warn("❌ loadSchedule failed:", e);
-    const table = document.getElementById("schedule-table");
-    if (table) {
-      table.innerHTML = `<tr><td colspan="6">Schedule unavailable</td></tr>`;
-    }
+    console.warn("📅 schedule failed:", e);
   }
 }
 
-// ===============================
-// Init + refresh
-// ===============================
-function refreshAll() {
-  loadAnnouncements();
-  loadStatus();
-  loadSchedule();
+/* ---------------- Boot ---------------- */
+async function refreshAll() {
+  await Promise.allSettled([loadStatus(), loadAnnouncements(), loadSchedule()]);
 }
 
 refreshAll();
-setInterval(refreshAll, 5 * 60 * 1000);
+setInterval(refreshAll, 60 * 1000); // refresh every 60s
